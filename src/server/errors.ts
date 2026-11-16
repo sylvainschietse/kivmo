@@ -12,9 +12,11 @@ export type ErrorCode =
   | "PAYMENT_IN_PROGRESS"
   | "NOT_CONNECTED"
   | "RATE_LIMITED"
-  | "DEMO_FORBIDDEN";
+  | "DEMO_FORBIDDEN"
+  | "UPSTREAM";
 
 const STATUS: Record<ErrorCode, number> = {
+  UPSTREAM: 502,
   UNAUTHENTICATED: 401,
   SESSION_EXPIRED: 401,
   FORBIDDEN: 403,

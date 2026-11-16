@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+/* Palette du cahier des charges (§4) + thème sombre. Le vert exprime une économie ;
+   pertes et erreurs ont toujours aussi un libellé texte. */
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #eef2f6;
+  --ink: #17212b;
+  --muted: #5a6876;
+  --line: #d9e0e7;
+  --green: #087f6b;
+  --green-ink: #ffffff;
+  --green-soft: #e3f3ef;
+  --lime: #d8f36a;
+  --lime-ink: #17212b;
+  --loss: #b4232c;
+  --loss-soft: #fbe9ea;
+  --warn: #8a5a00;
+  --warn-soft: #fff4d6;
+  --info: #1d5fa8;
+  --info-soft: #e6f0fb;
+  --focus: #1d5fa8;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f161d;
+    --surface: #17212b;
+    --surface-2: #1f2b37;
+    --ink: #eef2f6;
+    --muted: #a3b1bf;
+    --line: #2e3c4a;
+    --green: #3cc4a6;
+    --green-ink: #0f161d;
+    --green-soft: #12322c;
+    --lime: #d8f36a;
+    --loss: #ff7b82;
+    --loss-soft: #3a1c20;
+    --warn: #ffcf66;
+    --warn-soft: #3a2f12;
+    --info: #8cc2ff;
+    --info-soft: #172c44;
+    --focus: #8cc2ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f161d;
+  --surface: #17212b;
+  --surface-2: #1f2b37;
+  --ink: #eef2f6;
+  --muted: #a3b1bf;
+  --line: #2e3c4a;
+  --green: #3cc4a6;
+  --green-ink: #0f161d;
+  --green-soft: #12322c;
+  --lime: #d8f36a;
+  --loss: #ff7b82;
+  --loss-soft: #3a1c20;
+  --warn: #ffcf66;
+  --warn-soft: #3a2f12;
+  --info: #8cc2ff;
+  --info-soft: #172c44;
+  --focus: #8cc2ff;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-green: var(--green);
+  --color-green-ink: var(--green-ink);
+  --color-green-soft: var(--green-soft);
+  --color-lime: var(--lime);
+  --color-lime-ink: var(--lime-ink);
+  --color-loss: var(--loss);
+  --color-loss-soft: var(--loss-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Zones tactiles ≥ 44 px */
+.tap {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px; /* évite le zoom iOS */
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2), var(--line), var(--surface-2));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 12px;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}

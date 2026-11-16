@@ -25,6 +25,12 @@ npm run dev                          # http://localhost:3000
 ```bash
 npm run typecheck && npm run lint
 npm test                             # unitaires + intégration (base TEST_DATABASE_URL réinitialisée)
+npm run build && npm run test:e2e    # parcours navigateur 360 px, 390 px et bureau
 ```
 
-Documentation : [`docs/matrice-exigences.md`](docs/matrice-exigences.md) (exigences ↔ écrans ↔ tables ↔ API ↔ tests).
+## Documentation
+
+- [`docs/rapport-livraison.md`](docs/rapport-livraison.md) : ce qui est livré, services connectés ou « À connecter », tests, limites.
+- [`docs/matrice-exigences.md`](docs/matrice-exigences.md) : exigences ↔ écrans ↔ tables ↔ API ↔ tests.
+- [`docs/demarrage.md`](docs/demarrage.md) : installation locale, démo, tests, tâches planifiées.
+- [`docs/deploiement.md`](docs/deploiement.md) : mise en production.

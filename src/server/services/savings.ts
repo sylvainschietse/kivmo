@@ -2,9 +2,10 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { schema, type DB, type DBOrTx } from "@/db/client";
 import { D, Decimal, sum, toDb, ZERO } from "@/lib/decimal";
+import { formatMoney } from "@/lib/format";
 import { computeAmortization } from "@/domain/comparison";
 import { savingsCapacity, splitAllocation, transferable, type ProjectFigures } from "@/domain/savings";
-import { assertTransition, IN_FLIGHT_STATES, type PaymentState } from "@/domain/payment-state";
+import { assertTransition, canTransition, IN_FLIGHT_STATES, type PaymentState } from "@/domain/payment-state";
 import { AppError, notFound, validation } from "../errors";
 import type { Ctx } from "../authz";
 import { audit } from "../audit";
@@ -162,7 +163,7 @@ export async function declareManualTransfer(db: DB, ctx: Ctx, input: { projectId
     const [view] = await projectFigures(tx, ctx, [input.projectId]);
     if (!view) throw notFound("Projet introuvable.");
     if (amount.gt(view.transferable))
-      throw validation(`Ce montant dépasse ce qui reste à verser pour ce projet (${view.transferable.toFixed(2)} €). Un virement en cours ou déjà déclaré couvre peut-être déjà ces gains.`);
+      throw validation(`Ce montant dépasse ce qui reste à verser pour ce projet (${formatMoney(view.transferable)}). Un virement en cours ou déjà déclaré couvre peut-être déjà ces gains.`);
     const [row] = await tx.insert(schema.savingsEntries).values({ ownerUserId: ctx.userId, projectId: input.projectId, kind: "declared_manual", amount: toDb(amount, 4), occurredOn: input.occurredOn, provenance: "Déclaration manuelle de l'utilisateur", note: input.note ?? null }).returning();
     await audit(tx, { actorUserId: ctx.userId, action: "savings.declare_manual", resourceType: "savings_entry", resourceId: row.id, details: { amount: row.amount } });
     return row;
@@ -201,6 +202,18 @@ export async function listPaymentOrders(db: DBOrTx, ctx: Ctx) {
   return db.select().from(schema.paymentOrders).where(eq(schema.paymentOrders.ownerUserId, ctx.userId)).orderBy(desc(schema.paymentOrders.createdAt)).limit(50);
 }
 
+/**
+ * État rapporté par le prestataire (webhook ou rapprochement). Une banque peut annoncer directement
+ * « exécuté » après l'autorisation forte : l'ordre passe alors par « soumis » pour rester dans
+ * l'automate, chaque étape étant tracée.
+ */
+async function applyProviderState(tx: DBOrTx, order: typeof schema.paymentOrders.$inferSelect, to: PaymentState) {
+  if (!canTransition(order.state, to) && order.state === "to_authorize" && canTransition("submitted", to)) {
+    order = await setOrderState(tx, order, "submitted", { submittedAt: order.submittedAt ?? new Date() });
+  }
+  return setOrderState(tx, order, to);
+}
+
 async function setOrderState(tx: DBOrTx, order: typeof schema.paymentOrders.$inferSelect, to: PaymentState, extra: Partial<typeof schema.paymentOrders.$inferInsert> = {}) {
   assertTransition(order.state, to);
   const [row] = await tx
@@ -215,7 +228,7 @@ async function setOrderState(tx: DBOrTx, order: typeof schema.paymentOrders.$inf
       .insert(schema.savingsEntries)
       .values({ ownerUserId: row.ownerUserId, projectId: row.projectId, kind: "bank_confirmed", amount: row.amount, occurredOn: new Date().toISOString().slice(0, 10), paymentOrderId: row.id, provenance: `Confirmation ${row.providerOrderRef ?? ""}`.trim() })
       .onConflictDoNothing({ target: schema.savingsEntries.paymentOrderId });
-    await notify(tx, row.ownerUserId, { kind: "epargne", title: "Virement confirmé", body: `Votre virement de ${D(row.amount).toFixed(2)} € a été confirmé par la banque.`, link: "/projets", dedupeKey: `payment-confirmed:${row.id}` });
+    await notify(tx, row.ownerUserId, { kind: "epargne", title: "Virement confirmé", body: `Votre virement de ${formatMoney(row.amount)} a été confirmé par la banque.`, link: "/projets", dedupeKey: `payment-confirmed:${row.id}` });
   }
   return row;
 }
@@ -245,11 +258,11 @@ export async function preparePaymentOrder(db: DB, ctx: Ctx, input: { projectId: 
     if (rule?.pausedAt) throw validation("L'épargne est en pause.");
     if (rule?.capAmount) {
       const [{ month }] = await tx.select({ month: sql<string>`coalesce(sum(${schema.paymentOrders.amount}),0)` }).from(schema.paymentOrders).where(and(eq(schema.paymentOrders.ownerUserId, ctx.userId), inArray(schema.paymentOrders.state, ["confirmed", ...IN_FLIGHT_STATES]), sql`${schema.paymentOrders.createdAt} >= date_trunc('month', now())`));
-      if (D(month).plus(amount).gt(rule.capAmount)) throw validation(`Plafond mensuel de ${D(rule.capAmount).toFixed(2)} € atteint.`);
+      if (D(month).plus(amount).gt(rule.capAmount)) throw validation(`Plafond mensuel de ${formatMoney(rule.capAmount)} atteint.`);
     }
     const [view] = await projectFigures(tx, ctx, [input.projectId]);
     if (!view) throw notFound("Projet introuvable.");
-    if (amount.gt(view.transferable)) throw validation(`Le montant dépasse ce qui reste à verser pour ce projet (${view.transferable.toFixed(2)} €).`);
+    if (amount.gt(view.transferable)) throw validation(`Le montant dépasse ce qui reste à verser pour ce projet (${formatMoney(view.transferable)}).`);
     const [order] = await tx
       .insert(schema.paymentOrders)
       .values({ ownerUserId: ctx.userId, projectId: input.projectId, bankConnectionId: conn.id, amount: toDb(amount, 4), idempotencyKey: input.idempotencyKey, state: "draft", feesNotice: "Frais éventuels : dépendent de votre banque et du prestataire. Bac à sable : aucun frais." })
@@ -313,7 +326,7 @@ export async function reconcilePaymentOrders(db: DB, ownerUserId?: string) {
     await db.transaction(async (tx) => {
       const [fresh] = await tx.select().from(schema.paymentOrders).where(eq(schema.paymentOrders.id, o.id));
       if (fresh.state === status) return;
-      await setOrderState(tx, fresh, status);
+      await applyProviderState(tx, fresh, status);
       results.push({ id: o.id, from: o.state, to: status });
     });
   }
@@ -343,7 +356,7 @@ export async function handleBankWebhook(db: DB, rawBody: string, headers: { sign
     if (!order) return { result: "unknown_order" as const };
     await tx.update(schema.paymentEvents).set({ paymentOrderId: order.id, processedAt: new Date() }).where(eq(schema.paymentEvents.id, inserted[0].id));
     if (order.state === payload.data.state) return { result: "noop" as const };
-    const row = await setOrderState(tx, order, payload.data.state);
+    const row = await applyProviderState(tx, order, payload.data.state);
     return { result: "applied" as const, state: row.state };
   });
 }

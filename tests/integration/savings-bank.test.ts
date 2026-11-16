@@ -102,6 +102,20 @@ describe("F — confirmation bancaire et timeout", () => {
     expect(next.state).toBe("draft");
   });
 
+  it("autorisation forte puis exécution annoncée directement : l'ordre passe par « soumis » et confirme une fois", async () => {
+    const { u, p, conn } = await userReadyToPay();
+    const order = await preparePaymentOrder(db(), u, { projectId: p.id, amount: "10", bankConnectionId: conn.id, idempotencyKey: "pay-key-sca-1" });
+    const sub = await submitPaymentOrder(db(), u, order.id, { consent: true, scenario: "ok" });
+    expect(sub.state).toBe("to_authorize");
+    const w = signed({ id: "evt_sca_1", type: "payment.updated", data: { providerOrderRef: sub.providerOrderRef!, state: "confirmed" } });
+    expect((await handleBankWebhook(db(), w.raw, w.headers)).result).toBe("applied");
+    const [row] = await db().select().from(schema.paymentOrders).where(eq(schema.paymentOrders.id, order.id));
+    expect(row.state).toBe("confirmed");
+    expect(row.submittedAt).not.toBeNull();
+    const entries = await db().select().from(schema.savingsEntries).where(eq(schema.savingsEntries.paymentOrderId, order.id));
+    expect(entries).toHaveLength(1);
+  });
+
   it("webhook non signé, mal signé ou rejoué hors fenêtre : refusé", async () => {
     const body = JSON.stringify({ id: "evt_x", type: "t", data: { providerOrderRef: "x", state: "confirmed" } });
     await expectCode(handleBankWebhook(db(), body, { signature: null, timestamp: null }), "FORBIDDEN");

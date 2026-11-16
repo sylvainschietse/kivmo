@@ -27,11 +27,11 @@ Les chemins d'écrans sont ceux de l'application (`src/app`). Les tests : `U` = 
 | Exigence | Écran | Tables | API | Tests | État |
 |---|---|---|---|---|---|
 | Deux valeurs sur trois, divergence ⇒ choix de la valeur à corriger, remise séparée | `/pleins/nouveau` | `fillups.displayed_total/discount`, `fillup_lines` | `POST /api/fillups` | U « deux valeurs sur trois » · I « trois valeurs divergentes » | ✅ |
-| Validation : date non future, litres > 0, compteur croissant (confirmable), capacité | `/pleins/nouveau` | — | `POST /api/fillups` | U validation · I compteur, date | ✅ |
+| Validation : date non future, litres > 0, compteur croissant (confirmable), capacité ; horodatages égaux départagés par le compteur | `/pleins/nouveau` | — | `POST /api/fillups` | U validation · I compteur, date, « même minute » · E deux pleins | ✅ |
 | Doublons probables confirmables ; idempotence ; double clic | `/pleins/nouveau` | `fillups.idempotency_key` (unique) | `POST /api/fillups` (`Idempotency-Key`) | I idempotence parallèle, doublon probable | ✅ |
 | Ticket privé, hash, jamais deux pleins par ticket | `/pleins/nouveau` | `attachments` (hash unique), index unique `fillups.receipt_attachment_id` | `POST /api/attachments`, `GET /api/fillups/[id]/receipt` | I « un ticket ne peut pas créer deux pleins » | ✅ |
 | OCR ticket/compteur avec confiance par champ et confirmation | `/pleins/nouveau` | `attachments.ocr_result` | `POST /api/attachments` | — | 🟡 OCR à connecter (formulaire en repli) |
-| Dictée facultative avec confirmation | `/pleins/nouveau` | — | — | E | ✅ (navigateurs avec reconnaissance vocale) |
+| Dictée facultative avec confirmation | `/pleins/nouveau` | — | — | — (API navigateur non automatisable) | ✅ (navigateurs avec reconnaissance vocale) |
 | Géolocalisation à la demande, précision, refus, recherche par commune | `/pleins/nouveau`, `/stations` | — | `GET /api/stations/nearby` | E refus GPS | ✅ |
 | Compteur remplacé (décalage historisé) | `/garage/[id]` | `odometer_events` | server action | I « compteur remplacé » | ✅ |
 | Correction, suppression tracée, récapitulatif après enregistrement | `/pleins/[id]` | `audit_events`, `fillups.deleted_*` | `PATCH/DELETE /api/fillups/[id]` | I cas G | ✅ |
@@ -41,11 +41,11 @@ Les chemins d'écrans sont ceux de l'application (`src/app`). Les tests : `U` = 
 
 | Exigence | Écran | Tables | API | Tests | État |
 |---|---|---|---|---|---|
-| Liste + carte synchronisées, rayon, filtres (énergie, rupture, fraîcheur, enseigne, services, 24/24) | `/stations` | `stations`, `station_fuels`, `price_observations` | `GET /api/stations/nearby` | I cas L | ✅ liste · 🟡 fond de carte à connecter |
+| Liste + carte synchronisées, rayon, filtres (énergie, rupture, fraîcheur, enseigne, services, 24/24) | `/stations` | `stations`, `station_fuels`, `price_observations` | `GET /api/stations/nearby` | I cas L · E refus GPS | ✅ liste et filtres · 🟡 carte : fond de carte à connecter (aucune carte affichée sans fournisseur) |
 | Fiche : prix datés, provenance, disponibilité (4 états), vol d'oiseau identifié, GPS choisi | `/stations/[id]` | idem + `availability_reports` | `GET /api/stations/[id]` | I cas L | ✅ |
 | Distances/durées routières | `/stations/[id]`, `/trajets` | — | `POST /api/routes/estimate` | — | 🟡 routage à connecter (aucune distance inventée) |
 | Signalements communautaires : expiration, modération, anti-abus, sans écraser l'officiel | `/stations/[id]`, `/admin` | `availability_reports` | server action | I cas L | ✅ |
-| Favoris | `/stations` | `favorite_stations` | server action | E | ✅ |
+| Favoris | `/stations`, `/stations/[id]` | `favorite_stations` | server action | — | ✅ |
 | Import du flux public prix-carburants côté serveur, cache, reprise, journal | `/admin` | `import_jobs`, `integration_health` | `POST /api/cron/import-prices` | I import fixture, panne source | 🟡 activable (conditions à vérifier) |
 | Calcul de détour (gain net, volume de rentabilité) | `/trajets` | — | — | U recette D | ✅ |
 | Voyages : étapes, autonomie, budget | `/trajets` | — | `POST /api/routes/estimate` | — | 🟡 routage à connecter (saisie manuelle des distances) |
@@ -55,7 +55,7 @@ Les chemins d'écrans sont ceux de l'application (`src/app`). Les tests : `U` = 
 | Exigence | Écran | Tables | API | Tests | État |
 |---|---|---|---|---|---|
 | Historique filtrable, recherche, export | `/historique` | `fillups` | `GET /api/fillups`, `GET /api/exports` | I filtres conducteur | ✅ |
-| Graphiques avec tableaux équivalents, vues mensuelles | `/analyses` | — | `GET /api/analytics` | E | ✅ |
+| Graphiques avec tableaux équivalents, vues mensuelles | `/analyses` | — | `GET /api/analytics` | E parcours compte réel | ✅ |
 | Simulation multi-énergies (PHEV, EV, kWh séparés, charge gratuite) | `/simulations` | — | — | U simulation | ✅ |
 | Alertes de dérive, écoconduite, bilan environnemental | `/analyses` | `notifications` | — | — | ✅ dérive (historique suffisant) · ⏳ bilan environnemental (facteurs documentés non fournis) |
 
@@ -67,20 +67,20 @@ Les chemins d'écrans sont ceux de l'application (`src/app`). Les tests : `U` = 
 | Aucune double affectation ; perte ⇒ capacité réduite sans reprise | `/projets` | verrou transactionnel | `POST /api/savings/allocations` | I cas H | ✅ |
 | Virements déclarés (jamais « vérifiés ») | `/projets` | `savings_entries.kind` | server action | I cas H | ✅ |
 | Connexion bancaire, consentement, révocation, capacités séparées | `/projets/epargne` | `bank_connections`, `consent_records` | `POST /api/bank/connections` | I cas F | ✅ bac à sable · 🟡 production à connecter |
-| Machine d'états, idempotence, webhooks signés anti-rejeu, rapprochement, plafond/pause/arrêt serveur | `/projets/epargne` | `payment_orders`, `payment_events`, `sandbox_bank_payments` | `POST /api/bank/payment-orders`, `POST /api/bank/webhooks`, `POST /api/cron/reconcile` | I cas F (4 tests) | ✅ bac à sable |
+| Machine d'états, idempotence, webhooks signés anti-rejeu, rapprochement, plafond/pause/arrêt serveur | `/projets/epargne`, `/projets/epargne/bac-a-sable` | `payment_orders`, `payment_events`, `sandbox_bank_payments` | `POST /api/bank/payment-orders`, `POST /api/bank/webhooks`, `POST /api/cron/reconcile` | I cas F (5 tests) · E virement fictif | ✅ bac à sable |
 | Épargne automatique | `/projets/epargne` | `savings_rules` | — | I « automatique ⇒ NOT_CONNECTED » | 🟡 exige partenaire + banque compatibles |
 
 ## Entreprise (§11)
 
 | Exigence | Écran | Tables | API | Tests | État |
 |---|---|---|---|---|---|
-| Organisation séparée, rôles, invitations expirables/révocables | `/entreprise/[orgId]/membres` | `organizations`, `memberships`, `invitations` | server actions | I invitations | ✅ |
-| Contrôle serveur par ressource et pièce jointe | toutes | — | toutes | I cas I | ✅ |
-| Affectations datées, ratio conducteur seulement avec relevés | `/entreprise/[orgId]` | `vehicle_assignments` | — | I cas K | ✅ |
+| Organisation séparée, rôles, invitations expirables/révocables | `/entreprise`, `/entreprise/[orgId]/membres`, `/invitation` | `organizations`, `memberships`, `invitations` | server actions | I invitations | ✅ |
+| Contrôle serveur par ressource et pièce jointe | toutes | — | toutes | I cas I · E isolation | ✅ |
+| Affectations datées, ratio conducteur seulement avec relevés | `/entreprise/[orgId]/vehicules` | `vehicle_assignments` | server actions | I cas K | ✅ |
 | Tableau de bord (dépenses, litres, km documentés, coût/km, budgets, anomalies, pièces manquantes) | `/entreprise/[orgId]` | `budgets` | `GET /api/organizations/[id]/budgets` | I cas K | ✅ |
 | Validation des pleins (soumis/à compléter/validé/rejeté avec raison), remboursement | `/entreprise/[orgId]/validations` | `approvals`, `fillups.approval_*` | `POST /api/approvals` | I validation | ✅ |
 | Périodes ouvertes/clôturées, correction tracée, réouverture journalisée | `/entreprise/[orgId]/periodes` | `accounting_periods` | server actions | I cas J | ✅ |
-| Exports CSV/PDF avec champs comptables configurables, sans TVA calculée | `/entreprise/[orgId]/exports` | `export_jobs` | `GET /api/exports` | I export conducteur | ✅ |
+| Exports CSV/PDF avec champs comptables configurables, sans TVA calculée | `/entreprise/[orgId]` (exports), `/historique` | — | `GET /api/exports` | I export conducteur | ✅ |
 | Entretien, échéances, immobilisation | `/garage/[id]` | `maintenance_events`, `reminders` | server action | — | ✅ |
 
 ## Partenaires, notifications, communauté (§12, §13)
@@ -98,12 +98,13 @@ Les chemins d'écrans sont ceux de l'application (`src/app`). Les tests : `U` = 
 
 | Exigence | Écran | Tables | API | Tests | État |
 |---|---|---|---|---|---|
-| Démo sans compte, isolée et identifiable, jamais fusionnée | `/` → `/demo` | `users.is_demo` | — | I « mode démonstration isolé » | ✅ |
+| Démo sans compte, isolée et identifiable, jamais fusionnée | `/` (bouton démo) | `users.is_demo` | — | I « mode démonstration isolé » · E démo | ✅ |
 | Connexion par lien email | `/connexion` | `auth_tokens`, `sessions` | — | I « lien à usage unique » | ✅ (console en dev) · 🟡 SMTP à configurer |
-| Onboarding court, scénario préconfigurable (§20) | `/onboarding` | — | — | E | ✅ |
+| Onboarding court, scénario préconfigurable (§20) | `/onboarding`, `/simulations?modele=captur` | — | — | E parcours compte réel | ✅ |
 | Journal d'audit sans secrets | `/admin` | `audit_events` | — | I cas G, J | ✅ |
 | Export / suppression de compte | `/profil` | — | `GET /api/account/export` | I RGPD | ✅ |
 | Consentements séparés | `/profil` | `consent_records` | — | I devis, banque | ✅ |
-| Hors ligne : file stable, synchronisation visible, aucun envoi à l'insu | `/pleins/nouveau`, bandeau | IndexedDB (client) | `POST /api/fillups` | E hors ligne | ✅ |
-| États chargement/vide/erreur/session expirée/droits insuffisants | toutes | — | erreurs structurées | E | ✅ |
-| Accessibilité (clavier, focus visible, 44 px, libellés, contraste, animations réduites) | toutes | — | — | E | ✅ ciblé, audit WCAG complet à mener |
+| Hors ligne : file stable, synchronisation visible, aucun envoi à l'insu | `/pleins/nouveau`, bandeau | stockage local du navigateur (`kivmo-offline-fillups`) | `POST /api/fillups` (`Idempotency-Key`) | E hors ligne | ✅ |
+| États chargement/vide/erreur/session expirée/droits insuffisants | toutes | — | erreurs structurées | E (isolation : 404) | ✅ |
+| Accessibilité (clavier, focus visible, 44 px, libellés, contraste, animations réduites) | toutes | — | — | E (absence de débordement à 360/390 px et bureau) | ✅ ciblé, audit WCAG complet à mener |
+| Page publique d'état des services (connecté / bac à sable / à connecter) | `/integrations`, `/admin` | `integration_health` | `GET /api/integrations` | — | ✅ |

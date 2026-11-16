@@ -157,3 +157,17 @@ describe("G — correction d'un ancien plein", () => {
     expect(s.comparisons[1].profileVersion).toBe(2);
   });
 });
+
+describe("Horodatage identique", () => {
+  it("deux pleins saisis dans la même minute sont départagés par le compteur", async () => {
+    const { u, v } = await setup();
+    const at = daysAgo(3);
+    const a = await createFillup(db(), u, { ...fill(v.id, 3, "20000", true, "40", "36"), occurredAt: at }, "same-a");
+    expect(a.status).toBe("created");
+    const b = await createFillup(db(), u, { ...fill(v.id, 3, "20500", true, "30", "27"), occurredAt: at }, "same-b");
+    expect(b.status).toBe("created");
+    const s = await vehicleSummary(db(), u, v.id);
+    expect(s.intervals).toHaveLength(1);
+    expect(s.intervals[0].consumptionL100?.toFixed(2)).toBe("6.00");
+  });
+});
