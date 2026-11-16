@@ -1,0 +1,42 @@
+{
+  "_commentaire": "Extrait FICTIF reproduisant la forme des enregistrements du jeu de données « prix-des-carburants-en-france-flux-instantane-v2 » (API Explore v2.1). Valeurs inventées pour les tests.",
+  "total_count": 2,
+  "results": [
+    {
+      "id": 75011999,
+      "latitude": "4885990",
+      "longitude": "237000",
+      "cp": "75011",
+      "pop": "R",
+      "adresse": "10 RUE DE L'EXEMPLE",
+      "ville": "Paris",
+      "horaires_automate_24_24": "Oui",
+      "services_service": ["Station de gonflage", "Boutique alimentaire"],
+      "gazole_maj": "2026-11-15T08:12:00+00:00",
+      "gazole_prix": "1.689",
+      "e85_maj": "2026-11-15T08:12:00+00:00",
+      "e85_prix": "0.899",
+      "e10_maj": "2026-11-14T17:00:00+00:00",
+      "e10_prix": "1.749",
+      "sp98_maj": null,
+      "sp98_prix": null,
+      "carburants_disponibles": ["Gazole", "E85", "E10"],
+      "carburants_indisponibles": null,
+      "geom": { "lon": 2.37, "lat": 48.8599 }
+    },
+    {
+      "id": 93100999,
+      "latitude": "4886110",
+      "longitude": "244370",
+      "cp": "93100",
+      "adresse": "5 AVENUE DU TEST",
+      "ville": "Montreuil",
+      "horaires_automate_24_24": "Non",
+      "gazole_maj": "2026-11-15T09:00:00+00:00",
+      "gazole_prix": "1.659",
+      "carburants_disponibles": ["Gazole"],
+      "carburants_indisponibles": ["E85", "GPLc"],
+      "geom": null
+    }
+  ]
+}
