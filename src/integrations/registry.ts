@@ -1,5 +1,7 @@
 import "server-only";
 import { env } from "@/server/env";
+import { routingProvider } from "./routing";
+import { ocrProvider } from "./ocr";
 
 /**
  * Registre des intégrations externes (§15, §21). Chaque connecteur a un contrat d'interface
@@ -43,15 +45,16 @@ export function integrations(): IntegrationInfo[] {
     {
       key: "map_tiles",
       label: "Fond de carte",
-      status: env.mapTileUrl ? "connecte" : "a_connecter",
-      detail: env.mapTileUrl ? "Tuiles fournies par le fournisseur configuré." : "Fournisseur de tuiles à choisir (quotas, licence, attribution).",
+      // Aucun composant de carte n'est livré : l'état reste « à connecter » même si une URL est fournie.
+      status: "a_connecter",
+      detail: "Fournisseur de tuiles à choisir (quotas, licence, attribution), puis composant de carte à brancher sur la liste existante.",
       fallback: "Liste des stations, liens vers l'application de navigation.",
       envVars: ["NEXT_PUBLIC_MAP_TILE_URL", "NEXT_PUBLIC_MAP_ATTRIBUTION"],
     },
     {
       key: "routing",
       label: "Calcul d'itinéraire routier",
-      status: env.routingProvider ? "connecte" : "a_connecter",
+      status: routingProvider() ? "connecte" : "a_connecter",
       detail: "Aucune distance routière n'est calculée sans fournisseur : seules les distances à vol d'oiseau, identifiées comme telles.",
       fallback: "Saisie manuelle des kilomètres de détour ; navigation confiée à l'application GPS.",
       envVars: ["ROUTING_PROVIDER", "ROUTING_API_KEY"],
@@ -59,7 +62,7 @@ export function integrations(): IntegrationInfo[] {
     {
       key: "ocr",
       label: "Lecture automatique des tickets (OCR)",
-      status: env.ocrProvider ? "connecte" : "a_connecter",
+      status: ocrProvider() ? "connecte" : "a_connecter",
       detail: "Coût, confidentialité, rétention et qualité à valider avant choix du prestataire.",
       fallback: "Le ticket est stocké en privé et le formulaire se remplit à la main.",
       envVars: ["OCR_PROVIDER", "OCR_API_KEY"],
@@ -67,7 +70,8 @@ export function integrations(): IntegrationInfo[] {
     {
       key: "bank",
       label: "Connexion bancaire et virements",
-      status: env.bankProvider && env.bankEnvironment === "production" ? "connecte" : "bac_a_sable",
+      // L'adaptateur de production n'existe pas encore : seul le bac à sable est exécutable.
+      status: "bac_a_sable",
       detail:
         "Bac à sable intégré (machine d'états, webhooks signés, idempotence). Production non activée tant que le contrat et les capacités réelles ne sont pas vérifiés.",
       fallback: "Suivi manuel des virements déclarés (jamais présentés comme vérifiés par la banque).",
@@ -76,15 +80,15 @@ export function integrations(): IntegrationInfo[] {
     {
       key: "push",
       label: "Notifications push",
-      status: env.pushVapidPublicKey ? "connecte" : "a_connecter",
-      detail: "Nécessite des clés VAPID et la permission du navigateur.",
+      status: "a_connecter",
+      detail: "Nécessite des clés VAPID, un service d'envoi et la permission du navigateur ; l'envoi n'est pas encore branché.",
       fallback: "Centre de notifications dans l'application.",
       envVars: ["NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"],
     },
     {
       key: "billing",
       label: "Facturation professionnelle",
-      status: env.billingProvider ? "connecte" : "a_connecter",
+      status: "a_connecter",
       detail: "Aucun tarif professionnel décidé : plans configurables, prix vides par défaut.",
       fallback: "Abonnements suivis en statut « à connecter ».",
       envVars: ["BILLING_PROVIDER", "BILLING_API_KEY"],

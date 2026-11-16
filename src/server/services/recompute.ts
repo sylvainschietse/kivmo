@@ -27,7 +27,7 @@ export async function loadVehicleData(db: DBOrTx, vehicleId: string): Promise<Ve
     .select()
     .from(schema.fillups)
     .where(and(eq(schema.fillups.vehicleId, vehicleId), isNull(schema.fillups.deletedAt)))
-    .orderBy(asc(schema.fillups.occurredAt));
+    .orderBy(asc(schema.fillups.occurredAt), asc(schema.fillups.odometerKm), asc(schema.fillups.createdAt));
   const ids = fillups.map((f) => f.id);
   const lines = ids.length ? await db.select().from(schema.fillupLines).where(inArray(schema.fillupLines.fillupId, ids)) : [];
   const events = await db.select().from(schema.odometerEvents).where(eq(schema.odometerEvents.vehicleId, vehicleId));

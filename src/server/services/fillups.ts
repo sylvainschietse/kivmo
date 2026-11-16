@@ -72,10 +72,16 @@ function resolveLines(lines: z.output<typeof fillupLineInput>[]): ResolvedLine[]
   return out;
 }
 
-async function neighbours(db: DBOrTx, vehicleId: string, at: Date, excludeId?: string) {
+/**
+ * Pleins voisins dans l'ordre chronologique. À horodatage égal (deux saisies dans la même minute),
+ * l'ordre est départagé par le compteur, comme dans le recalcul.
+ */
+async function neighbours(db: DBOrTx, vehicleId: string, at: Date, odometerKm: string, excludeId?: string) {
   const base = and(eq(schema.fillups.vehicleId, vehicleId), isNull(schema.fillups.deletedAt), excludeId ? sql`${schema.fillups.id} <> ${excludeId}` : undefined);
-  const [previous] = await db.select().from(schema.fillups).where(and(base, lte(schema.fillups.occurredAt, at))).orderBy(desc(schema.fillups.occurredAt)).limit(1);
-  const [next] = await db.select().from(schema.fillups).where(and(base, gte(schema.fillups.occurredAt, at))).orderBy(schema.fillups.occurredAt).limit(1);
+  const f = schema.fillups;
+  const ts = at.toISOString();
+  const [previous] = await db.select().from(f).where(and(base, sql`(${f.occurredAt} < ${ts}::timestamptz or (${f.occurredAt} = ${ts}::timestamptz and ${f.odometerKm} <= ${odometerKm}::numeric))`)).orderBy(desc(f.occurredAt), desc(f.odometerKm)).limit(1);
+  const [next] = await db.select().from(f).where(and(base, sql`(${f.occurredAt} > ${ts}::timestamptz or (${f.occurredAt} = ${ts}::timestamptz and ${f.odometerKm} > ${odometerKm}::numeric))`)).orderBy(f.occurredAt, f.odometerKm).limit(1);
   return { previous: previous ?? null, next: next ?? null };
 }
 
@@ -129,7 +135,7 @@ export async function createFillup(db: DB, ctx: Ctx, raw: FillupInputRaw, idempo
 
   const events = await db.select().from(schema.odometerEvents).where(eq(schema.odometerEvents.vehicleId, vehicle.id));
   const norm = (raw: string | Decimal, at: Date) => normalizeOdometer(D(raw), at, events);
-  const { previous, next } = await neighbours(db, vehicle.id, input.occurredAt);
+  const { previous, next } = await neighbours(db, vehicle.id, input.occurredAt, String(input.odometerKm));
   const issues = validateFillup({
     occurredAt: input.occurredAt,
     odometerKm: norm(input.odometerKm, input.occurredAt),
