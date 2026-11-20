@@ -10,8 +10,9 @@ const DISMISS_KEY = "kivmo-install-masque";
 
 function detect(): Platform {
   const nav = window.navigator as Navigator & { standalone?: boolean };
-  if (window.matchMedia("(display-mode: standalone)").matches || nav.standalone) return "installed";
   const ua = nav.userAgent;
+  // L'APK Android (dossier mobile/) ajoute « KivmoAndroid » à l'agent utilisateur.
+  if (window.matchMedia("(display-mode: standalone)").matches || nav.standalone || ua.includes("KivmoAndroid")) return "installed";
   const ios = /iPhone|iPad|iPod/.test(ua) || (ua.includes("Macintosh") && nav.maxTouchPoints > 1);
   if (ios) return /CriOS|FxiOS|EdgiOS/.test(ua) ? "ios-other-browser" : "ios";
   if (/Android/.test(ua)) return "android";

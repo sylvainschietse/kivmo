@@ -1,0 +1,102 @@
+name: APK Android
+
+# Construit l'APK KIVMO (enveloppe native de l'application en ligne).
+# - Sur une pull request qui touche mobile/ : construction de contrôle (adresse fictive), rien n'est publié.
+# - Lancement manuel (onglet Actions, « Run workflow ») : APK signée publiée dans la release « android ».
+on:
+  pull_request:
+    paths: ["mobile/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "Adresse https de KIVMO en ligne (ex. https://kivmo.vercel.app)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      KIVMO_URL: ${{ github.event_name == 'workflow_dispatch' && (inputs.app_url || vars.KIVMO_URL) || 'https://kivmo.example.app' }}
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+
+      - name: Vérifier l'adresse
+        run: |
+          case "$KIVMO_URL" in https://*) echo "Adresse : $KIVMO_URL" ;; *) echo "::error::Adresse manquante ou non https. Renseignez app_url ou la variable KIVMO_URL."; exit 1 ;; esac
+
+      - run: npm ci
+      - name: Projet Android
+        run: |
+          npx cap add android
+          npm run icones
+          node scripts/preparer-android.mjs
+          npx cap sync android
+
+      - name: Clé de signature
+        id: cle
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/kivmo.keystore"
+            echo "password=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "permanente=oui" >> "$GITHUB_OUTPUT"
+          else
+            # Sans clé enregistrée dans les secrets du dépôt, une clé est créée pour cette construction seulement :
+            # l'APK s'installe, mais une version suivante demandera de désinstaller l'ancienne.
+            PW=$(openssl rand -hex 20)
+            echo "::add-mask::$PW"
+            keytool -genkeypair -keystore "$RUNNER_TEMP/kivmo.keystore" -alias kivmo -keyalg RSA -keysize 4096 -validity 10000 \
+              -storepass "$PW" -keypass "$PW" -dname "CN=KIVMO, O=KIVMO, C=FR"
+            echo "password=$PW" >> "$GITHUB_OUTPUT"
+            echo "permanente=non" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Construire l'APK
+        run: |
+          # apksigner (signature v2) est requis par Android récent ; il est dans les build-tools du SDK.
+          export PATH="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1):$PATH"
+          which apksigner
+          npx cap build android --androidreleasetype APK --signing-type apksigner \
+            --keystorepath "$RUNNER_TEMP/kivmo.keystore" --keystorealias kivmo \
+            --keystorepass "${{ steps.cle.outputs.password }}" --keystorealiaspass "${{ steps.cle.outputs.password }}"
+          APK=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          test -n "$APK"
+          cp "$APK" "$GITHUB_WORKSPACE/KIVMO.apk"
+          ls -la "$GITHUB_WORKSPACE/KIVMO.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KIVMO-apk
+          path: KIVMO.apk
+
+      - name: Publier dans la release « android »
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PERMANENTE: ${{ steps.cle.outputs.permanente }}
+        run: |
+          NOTE="APK KIVMO $VERSION_NAME. Ouvre $KIVMO_URL dans une fenêtre d'application. Les mises à jour du site sont visibles sans réinstaller."
+          if [ "$PERMANENTE" = "non" ]; then NOTE="$NOTE Pour installer une nouvelle version de l'APK, désinstallez d'abord l'ancienne."; fi
+          gh release view android >/dev/null 2>&1 || gh release create android --title "KIVMO pour Android" --notes "$NOTE" --latest=false
+          gh release edit android --notes "$NOTE"
+          gh release upload android "$GITHUB_WORKSPACE/KIVMO.apk" --clobber

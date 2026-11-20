@@ -23,6 +23,6 @@ export default defineConfig({
     port: PORT,
     reuseExistingServer: false,
     timeout: 120_000,
-    env: { DATABASE_URL: DB, APP_URL: `http://localhost:${PORT}`, SESSION_SECRET: "e2e-secret-e2e-secret-e2e-secret-32", EMAIL_PROVIDER: "console", DEMO_MODE: "on", BANK_ENVIRONMENT: "sandbox", BANK_WEBHOOK_SECRET: "e2e-webhook-secret", STORAGE_DIR: "./storage-e2e", CRON_SECRET: "e2e-cron" },
+    env: { DATABASE_URL: DB, APP_URL: `http://localhost:${PORT}`, SESSION_SECRET: "e2e-secret-e2e-secret-e2e-secret-32", EMAIL_PROVIDER: "console", AUTH_LINK_ON_SCREEN: "on", DEMO_MODE: "on", BANK_ENVIRONMENT: "sandbox", BANK_WEBHOOK_SECRET: "e2e-webhook-secret", STORAGE_DIR: "./storage-e2e", CRON_SECRET: "e2e-cron" },
   },
 });

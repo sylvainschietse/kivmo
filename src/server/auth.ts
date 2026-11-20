@@ -43,7 +43,10 @@ export async function requestMagicLink(db: DB, rawEmail: string, nextPath = "/ac
     subject: "Votre lien de connexion KIVMO",
     text: `Bonjour,\n\nVoici votre lien de connexion KIVMO, valable ${MAGIC_LINK_MINUTES} minutes :\n${link}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message.`,
   });
-  return { delivery, devLink: delivery === "console" ? link : null };
+  // Le lien n'est affiché à l'écran qu'en développement (ou en test explicite) : en ligne,
+  // l'afficher permettrait d'entrer dans le compte de n'importe qui.
+  const showOnScreen = delivery === "console" && (process.env.NODE_ENV !== "production" || process.env.AUTH_LINK_ON_SCREEN === "on");
+  return { delivery, devLink: showOnScreen ? link : null };
 }
 
 /** Consomme un lien (usage unique) et ouvre une session. */
