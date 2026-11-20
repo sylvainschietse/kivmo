@@ -7,6 +7,7 @@ import { AppError, validation } from "../errors";
 import { requireOrgRole, requireVehicle, membershipOf, type Ctx } from "../authz";
 import { audit } from "../audit";
 import { recomputeVehicle } from "./recompute";
+import { storeAttachment } from "./attachments";
 
 const decStr = z.union([z.string(), z.number()]).transform((v) => String(v).replace(",", ".").replace(/\s/g, ""))
   .refine((v) => /^-?\d+(\.\d+)?$/.test(v), "Nombre invalide");
@@ -213,4 +214,20 @@ export async function endAssignment(db: DB, ctx: Ctx, assignmentId: string, inpu
 export async function vehiclesByIds(db: DBOrTx, ids: string[]) {
   if (ids.length === 0) return [];
   return db.select().from(schema.vehicles).where(inArray(schema.vehicles.id, ids));
+}
+
+/* ── Photo du véhicule (vignette) ── */
+
+const PHOTO_DATA_URL = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
+
+/** Enregistre la photo (déjà réduite côté téléphone) et l'associe au véhicule. */
+export async function setVehiclePhoto(db: DB, ctx: Ctx, vehicleId: string, dataUrl: string) {
+  const { vehicle } = await requireVehicle(db, ctx, vehicleId, "write");
+  const m = PHOTO_DATA_URL.exec(dataUrl);
+  if (!m) throw validation("Photo du véhicule illisible.");
+  const data = Buffer.from(m[2], "base64");
+  if (data.length > 1024 * 1024) throw validation("Photo du véhicule trop lourde.");
+  const { attachment } = await storeAttachment(db, ctx, { kind: "photo", mimeType: m[1], data, organizationId: vehicle.organizationId });
+  await db.update(schema.vehicles).set({ photoAttachmentId: attachment.id, updatedAt: new Date() }).where(eq(schema.vehicles.id, vehicleId));
+  return attachment.id;
 }

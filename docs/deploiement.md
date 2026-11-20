@@ -37,7 +37,8 @@ PostgreSQL 16, puis build et parcours navigateur Playwright.
 - Base : projet Supabase, schéma appliqué depuis `drizzle/0000_initial.sql` avec la sécurité par ligne activée sur toutes les tables (l'API publique de Supabase n'expose rien ; l'application se connecte côté serveur).
 - `DATABASE_URL` : adresse **Transaction pooler** de Supabase (port 6543). Le client désactive les requêtes préparées (`prepare: false`), compatible avec ce mode.
 - `vercel.json` : région Paris (`cdg1`) et tâches planifiées quotidiennes (purge de la démo, rapprochement des virements). Vercel les appelle en GET avec `Authorization: Bearer CRON_SECRET`.
-- Fichiers joints : le disque de Vercel n'est pas persistant. `STORAGE_DIR=/tmp/kivmo` permet de tester, mais les photos ne sont pas conservées ; un stockage durable (Supabase Storage) reste **à connecter**.
+- Fichiers joints : le disque de Vercel n'est pas persistant. Sur Vercel, les fichiers (tickets, photos des véhicules) sont donc conservés **dans PostgreSQL** (`STORAGE_BACKEND=db`, automatique quand `VERCEL` est défini ; migration `0002`). Les photos sont réduites sur le téléphone avant envoi.
+- Lecture des photos : renseigner `ANTHROPIC_API_KEY` (console.anthropic.com). Coût indicatif : 1 à 2 centimes par photo lue. Les photos envoyées pour lecture ne sont pas conservées par KIVMO.
 - Connexion par email : avec `EMAIL_PROVIDER=console` en ligne, aucun lien n'est affiché ni envoyé et l'écran le dit ; seule la démo fonctionne tant que `EMAIL_PROVIDER=smtp` n'est pas configuré. `AUTH_LINK_ON_SCREEN=on` (affichage du lien à l'écran) est réservé aux tests automatisés et ne doit jamais être activé en ligne.
 
 ## APK Android

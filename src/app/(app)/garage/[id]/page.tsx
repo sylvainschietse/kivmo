@@ -10,6 +10,9 @@ import { formatDate, formatKm, formatMoney, formatSignedMoney, formatUnitPrice, 
 import { FUEL_LABELS, FUELS, type FuelCode } from "@/domain/types";
 import { Badge, Button, Card, EmptyState, ErrorFromQuery, Field, Input, Notice, OkFromQuery, PageHeader, Select, Table, Textarea } from "@/components/ui";
 import { VehicleFields } from "@/components/forms/vehicle-fields";
+import { VehicleScan } from "@/components/forms/vehicle-scan";
+import { ocrAvailable } from "@/integrations/ocr";
+import { signAttachmentUrl } from "@/server/auth";
 import { addMaintenanceAction, addReferenceAction, archiveVehicleAction, completeReminderAction, odometerReplacementAction, setConversionAction, updateVehicleAction } from "@/app/actions/vehicles";
 
 const KIND_LABELS: Record<string, string> = { ancien_vehicule: "Ancien véhicule", meme_vehicule_autre_carburant: "Même véhicule, autre carburant", scenario_libre: "Scénario libre" };
@@ -35,9 +38,14 @@ export default async function VehiculeDetail({ params, searchParams }: { params:
   const reminders = await db.select().from(schema.reminders).where(eq(schema.reminders.vehicleId, id));
   const maintTotal = maint.reduce((a, m) => a.plus(m.cost ?? 0), D(0));
   const today = new Date().toISOString().slice(0, 10);
+  const photoUrl = vehicle.photoAttachmentId ? signAttachmentUrl(vehicle.photoAttachmentId, 3600) : null;
 
   return (
     <div className="space-y-4">
+      {photoUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photoUrl} alt={`Photo de ${vehicle.name}`} className="h-40 w-full rounded-2xl object-cover sm:h-56" />
+      )}
       <PageHeader title={vehicle.name} subtitle={[vehicle.make, vehicle.model, vehicle.year, vehicle.engine].filter(Boolean).join(" · ") || "Véhicule"} />
       <OkFromQuery ok={q.ok} />
       <ErrorFromQuery error={q.erreur} />
@@ -152,6 +160,7 @@ export default async function VehiculeDetail({ params, searchParams }: { params:
         <form action={updateVehicleAction}>
           <input type="hidden" name="vehicleId" value={id} />
           <input type="hidden" name="version" value={vehicle.version} />
+          <VehicleScan photoScan={ocrAvailable()} currentPhotoUrl={photoUrl} />
           <VehicleFields d={{ ...vehicle, tankCapacityL: vehicle.tankCapacityL ? Number(vehicle.tankCapacityL).toString() : "", initialOdometerKm: Number(vehicle.initialOdometerKm).toFixed(0) }} />
           <div className="mt-3 flex flex-wrap gap-2"><Button type="submit">Enregistrer</Button></div>
         </form>

@@ -3,7 +3,8 @@ import { getDb } from "@/db/client";
 import { requireSession } from "@/server/session";
 import { homeData } from "@/server/services/dashboard";
 import { formatConsumption, formatDate, formatKm, formatLiters, formatMoney, formatSignedMoney } from "@/lib/format";
-import { Badge, Card, EmptyState, ErrorFromQuery, LinkButton, Notice, OkFromQuery, Select, Stat } from "@/components/ui";
+import { Badge, Card, EmptyState, ErrorFromQuery, LinkButton, Notice, OkFromQuery, Stat, cx } from "@/components/ui";
+import { signAttachmentUrl } from "@/server/auth";
 import { setActiveVehicleAction } from "@/app/actions/vehicles";
 import { ISSUE_MESSAGES } from "@/domain/consumption";
 import { progressRatio } from "@/domain/savings";
@@ -47,13 +48,27 @@ export default async function Accueil({ searchParams }: { searchParams: Promise<
         <div className="min-w-0">
           <p className="text-sm text-muted">Véhicule actif</p>
           {h.vehicles.length > 1 ? (
-            <form action={setActiveVehicleAction} className="flex gap-2">
-              <label htmlFor="vehicleId" className="sr-only">Changer de véhicule</label>
-              <Select id="vehicleId" name="vehicleId" defaultValue={s.vehicle.id} className="max-w-xs font-semibold">
-                {h.vehicles.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </Select>
-              <button className="tap rounded-xl bg-surface-2 px-3 text-sm font-semibold">Changer</button>
-            </form>
+            <ul className="mt-1 flex gap-2 overflow-x-auto pb-1" aria-label="Changer de véhicule">
+              {h.vehicles.map((v) => {
+                const active = v.id === s.vehicle.id;
+                return (
+                  <li key={v.id} className="shrink-0">
+                    <form action={setActiveVehicleAction}>
+                      <input type="hidden" name="vehicleId" value={v.id} />
+                      <button aria-pressed={active} className={cx("tap flex w-24 flex-col items-center gap-1 rounded-xl border p-1.5 text-xs font-semibold", active ? "border-green bg-green-soft text-green" : "border-line")}>
+                        {v.photoAttachmentId ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={signAttachmentUrl(v.photoAttachmentId, 3600)} alt="" className="h-14 w-full rounded-lg object-cover" />
+                        ) : (
+                          <span className="flex h-14 w-full items-center justify-center rounded-lg bg-surface-2 text-lg">{v.name.slice(0, 1).toUpperCase()}</span>
+                        )}
+                        <span className="w-full truncate">{v.name}</span>
+                      </button>
+                    </form>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
             <h1 className="text-2xl font-bold">{s.vehicle.name}</h1>
           )}

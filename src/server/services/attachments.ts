@@ -38,13 +38,16 @@ export async function storeAttachment(db: DB, ctx: Ctx, input: { kind: string; m
     const [used] = await db.select({ id: schema.fillups.id }).from(schema.fillups).where(eq(schema.fillups.receiptAttachmentId, existing.id));
     return { attachment: existing, duplicate: true, usedByFillupId: used?.id ?? null };
   }
-  const key = `${ctx.userId}/${hash.slice(0, 2)}/${hash}`;
-  const full = path.join(env.storageDir, key);
-  await mkdir(path.dirname(full), { recursive: true });
-  await writeFile(full, input.data, { mode: 0o600 });
+  const inDb = env.storageBackend === "db";
+  const key = `${inDb ? "db:" : ""}${ctx.userId}/${hash.slice(0, 2)}/${hash}`;
+  if (!inDb) {
+    const full = path.join(env.storageDir, key);
+    await mkdir(path.dirname(full), { recursive: true });
+    await writeFile(full, input.data, { mode: 0o600 });
+  }
   const [row] = await db
     .insert(schema.attachments)
-    .values({ ownerUserId: ctx.userId, organizationId: input.organizationId ?? null, kind: input.kind, storageKey: key, mimeType: input.mimeType, sizeBytes: input.data.length, sha256: hash })
+    .values({ ownerUserId: ctx.userId, organizationId: input.organizationId ?? null, kind: input.kind, storageKey: key, mimeType: input.mimeType, sizeBytes: input.data.length, sha256: hash, data: inDb ? input.data : null })
     .returning();
   await audit(db, { actorUserId: ctx.userId, organizationId: input.organizationId, action: "attachment.upload", resourceType: "attachment", resourceId: row.id, details: { kind: input.kind, size: row.sizeBytes } });
   return { attachment: row, duplicate: false, usedByFillupId: null };
@@ -57,6 +60,7 @@ export async function attachmentUrl(db: DBOrTx, ctx: Ctx, attachmentId: string) 
 
 export async function readAttachment(db: DBOrTx, ctx: Ctx, attachmentId: string) {
   const a = await requireAttachment(db, ctx, attachmentId);
+  if (a.data) return { attachment: a, data: Buffer.from(a.data) };
   try {
     const data = await readFile(path.join(env.storageDir, a.storageKey));
     return { attachment: a, data };
@@ -66,5 +70,6 @@ export async function readAttachment(db: DBOrTx, ctx: Ctx, attachmentId: string)
 }
 
 export async function deleteStoredFile(storageKey: string) {
+  if (storageKey.startsWith("db:")) return; // contenu supprimé avec la ligne en base
   await unlink(path.join(env.storageDir, storageKey)).catch(() => undefined);
 }

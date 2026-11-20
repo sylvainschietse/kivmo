@@ -61,11 +61,11 @@ export function integrations(): IntegrationInfo[] {
     },
     {
       key: "ocr",
-      label: "Lecture automatique des tickets (OCR)",
+      label: "Lecture automatique des photos (compteur, pompe, ticket, carte grise)",
       status: ocrProvider() ? "connecte" : "a_connecter",
-      detail: "Coût, confidentialité, rétention et qualité à valider avant choix du prestataire.",
-      fallback: "Le ticket est stocké en privé et le formulaire se remplit à la main.",
-      envVars: ["OCR_PROVIDER", "OCR_API_KEY"],
+      detail: "Service de vision Claude (Anthropic), environ 1 à 2 centimes par photo. Les photos envoyées pour lecture ne sont pas conservées ; les valeurs lues sont à vérifier avant enregistrement.",
+      fallback: "Le formulaire se remplit à la main.",
+      envVars: ["ANTHROPIC_API_KEY", "OCR_MODEL"],
     },
     {
       key: "bank",

@@ -1,3 +1,4 @@
+import { ocrAvailable } from "@/integrations/ocr";
 import { and, desc, eq, isNull, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db/client";
 import { requireSession } from "@/server/session";
@@ -48,6 +49,7 @@ export default async function NouveauPlein({ searchParams }: { searchParams: Pro
         referenceNeedsPrice={referenceNeedsPrice}
         lastOdometer={lastOdometer}
         initialStation={initialStation}
+        photoScan={ocrAvailable()}
       />
     </div>
   );
