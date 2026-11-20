@@ -15,7 +15,9 @@ export async function requestLinkAction(fd: FormData) {
   const next = String(fd.get("next") ?? "/accueil");
   try {
     await checkRateLimit(getDb(), `magic:${email.toLowerCase()}`, 5, 900);
-    const { devLink } = await requestMagicLink(getDb(), email, next);
+    const { delivery, devLink } = await requestMagicLink(getDb(), email, next);
+    // En ligne sans fournisseur d'email, rien n'est réellement envoyé : on le dit plutôt que d'annoncer un envoi.
+    if (delivery === "console" && !devLink) throw new AppError("NOT_CONNECTED", "L'envoi des emails de connexion n'est pas encore branché. Utilisez le mode démonstration en attendant.");
     const q = new URLSearchParams({ envoye: "1", email });
     if (devLink) q.set("dev", devLink);
     redirect(`/connexion?${q}`);

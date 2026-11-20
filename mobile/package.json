@@ -1,0 +1,18 @@
+{
+  "name": "kivmo-android",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Enveloppe Android (APK) de KIVMO : ouvre l'application en ligne dans une fenêtre native.",
+  "scripts": {
+    "icones": "capacitor-assets generate --android --iconBackgroundColor '#087F6B' --splashBackgroundColor '#087F6B'"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "4.0.0",
+    "@capacitor/cli": "8.6.2",
+    "typescript": "^5.9.3"
+  }
+}

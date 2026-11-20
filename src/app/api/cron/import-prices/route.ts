@@ -11,3 +11,6 @@ export const POST = cron(async (db, req) => {
     radiusKm: q.has("radiusKm") ? Number(q.get("radiusKm")) : undefined,
   });
 });
+
+// Vercel Cron appelle les tâches en GET avec « Authorization: Bearer CRON_SECRET ».
+export const GET = POST;

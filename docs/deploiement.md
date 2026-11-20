@@ -31,3 +31,15 @@ plateforme Next.js gérée.
 
 `.github/workflows/ci.yml` : vérification des types, lint, tests unitaires et d'intégration sur
 PostgreSQL 16, puis build et parcours navigateur Playwright.
+
+## Vercel + Supabase
+
+- Base : projet Supabase, schéma appliqué depuis `drizzle/0000_initial.sql` avec la sécurité par ligne activée sur toutes les tables (l'API publique de Supabase n'expose rien ; l'application se connecte côté serveur).
+- `DATABASE_URL` : adresse **Transaction pooler** de Supabase (port 6543). Le client désactive les requêtes préparées (`prepare: false`), compatible avec ce mode.
+- `vercel.json` : région Paris (`cdg1`) et tâches planifiées quotidiennes (purge de la démo, rapprochement des virements). Vercel les appelle en GET avec `Authorization: Bearer CRON_SECRET`.
+- Fichiers joints : le disque de Vercel n'est pas persistant. `STORAGE_DIR=/tmp/kivmo` permet de tester, mais les photos ne sont pas conservées ; un stockage durable (Supabase Storage) reste **à connecter**.
+- Connexion par email : avec `EMAIL_PROVIDER=console` en ligne, aucun lien n'est affiché ni envoyé et l'écran le dit ; seule la démo fonctionne tant que `EMAIL_PROVIDER=smtp` n'est pas configuré. `AUTH_LINK_ON_SCREEN=on` (affichage du lien à l'écran) est réservé aux tests automatisés et ne doit jamais être activé en ligne.
+
+## APK Android
+
+Voir `mobile/README.md` : workflow GitHub « APK Android », publication dans la release `android`.
