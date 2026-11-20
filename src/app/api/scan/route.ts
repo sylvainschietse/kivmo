@@ -2,15 +2,15 @@ import { api } from "@/server/api";
 import { AppError } from "@/server/errors";
 import { checkRateLimit } from "@/server/rate-limit";
 import { sniffMime } from "@/server/services/attachments";
-import { ocrAvailable, OCR_UNAVAILABLE_MESSAGE, readFillupPhotos, readVehiclePhotos, type ScanImage } from "@/integrations/ocr";
+import { ocrAvailable, OCR_UNAVAILABLE_MESSAGE, readFillupPhotos, readMaintenancePhotos, readVehiclePhotos, type ScanImage } from "@/integrations/ocr";
 
 export const maxDuration = 60;
 
-const KINDS = { fillup: ["compteur", "pompe", "ticket"], vehicle: ["carte_grise", "vehicule"] } as const;
+const KINDS = { fillup: ["compteur", "pompe", "ticket"], vehicle: ["carte_grise", "vehicule"], maintenance: ["facture"] } as const;
 const MAX_BYTES = 4 * 1024 * 1024;
 
 /**
- * Lecture de photos pour pré-remplir un formulaire (plein ou véhicule).
+ * Lecture de photos pour pré-remplir un formulaire (plein, véhicule ou entretien).
  * Les photos ne sont pas enregistrées : seules les valeurs lues sont renvoyées, à vérifier.
  */
 export const POST = api(async ({ req, db, ctx }) => {
@@ -18,7 +18,7 @@ export const POST = api(async ({ req, db, ctx }) => {
   await checkRateLimit(db, `scan:${ctx.userId}`, 40, 3600);
   const form = await req.formData();
   const target = String(form.get("target") ?? "");
-  if (target !== "fillup" && target !== "vehicle") throw new AppError("VALIDATION", "Cible de lecture invalide.");
+  if (target !== "fillup" && target !== "vehicle" && target !== "maintenance") throw new AppError("VALIDATION", "Cible de lecture invalide.");
   const allowed: readonly string[] = KINDS[target];
   const images: ScanImage[] = [];
   const kinds: string[] = [];
@@ -34,7 +34,8 @@ export const POST = api(async ({ req, db, ctx }) => {
   if (images.length === 0) throw new AppError("VALIDATION", "Aucune photo reçue.");
   if (images.length > 3) throw new AppError("VALIDATION", "Trois photos au maximum.");
   try {
-    const result = target === "fillup" ? await readFillupPhotos(images, kinds) : await readVehiclePhotos(images, kinds);
+    const result =
+      target === "fillup" ? await readFillupPhotos(images, kinds) : target === "vehicle" ? await readVehiclePhotos(images, kinds) : await readMaintenancePhotos(images, kinds);
     return { target, result };
   } catch (e) {
     console.error("[scan] lecture impossible", e);

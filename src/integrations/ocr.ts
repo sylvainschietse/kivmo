@@ -45,6 +45,26 @@ export const vehicleScanSchema = z.object({
 });
 export type VehicleScan = z.infer<typeof vehicleScanSchema>;
 
+export const maintenanceScanSchema = z.object({
+  kind: z.enum(["entretien", "controle_technique", "pneus", "reparation"]).nullable().describe("Nature : entretien (révision, vidange, courroie…), controle_technique (procès-verbal de CT ou contre-visite), pneus, reparation (panne, carrosserie, pièce)"),
+  date: z.string().nullable().describe("Date de l'intervention ou de la facture, format AAAA-MM-JJ"),
+  odometerKm: z.string().nullable().describe("Kilométrage du véhicule noté sur le document, chiffres uniquement"),
+  totalTtc: z.string().nullable().describe("Montant total TTC payé en euros, point décimal (0 si gratuit)"),
+  garage: z.string().nullable().describe("Nom du garage ou du centre de contrôle"),
+  summary: z.string().nullable().describe("Résumé très court en français des travaux, ou résultat du CT (favorable, défavorable avec contre-visite…), 120 caractères maximum"),
+  nextDueOn: z.string().nullable().describe("Prochaine échéance écrite sur le document, format AAAA-MM-JJ : pour un CT la date limite du prochain contrôle ou de la contre-visite ; pour un entretien la prochaine révision si elle est indiquée"),
+  nextDueKm: z.string().nullable().describe("Prochaine échéance en kilomètres si elle est écrite, chiffres uniquement"),
+  confidence,
+  note: z.string().nullable().describe("Courte remarque en français si une valeur est douteuse, sinon null"),
+});
+export type MaintenanceScan = z.infer<typeof maintenanceScanSchema>;
+
+const MAINTENANCE_PROMPT = `Tu lis la photo d'une facture de garage, d'un ticket d'entretien ou d'un procès-verbal de contrôle technique français, pour pré-remplir le carnet d'entretien d'un véhicule.
+Règles :
+- Recopie uniquement ce qui est réellement lisible ; mets null sinon. Ne calcule pas d'échéance qui n'est pas écrite.
+- Montant : le total TTC final effectivement payé.
+- Ignore et ne recopie jamais le nom, l'adresse ou toute donnée personnelle du client.`;
+
 const FILLUP_PROMPT = `Tu lis des photos prises par un automobiliste au moment de faire le plein, pour pré-remplir un formulaire.
 Les photos peuvent montrer : le compteur kilométrique du tableau de bord, l'écran de la pompe (volume, prix au litre, montant), ou un ticket de caisse.
 Règles :
@@ -98,6 +118,10 @@ export function readFillupPhotos(images: ScanImage[], kinds: string[]) {
 
 export function readVehiclePhotos(images: ScanImage[], kinds: string[]) {
   return read(vehicleScanSchema, VEHICLE_PROMPT, images, `Photos fournies (dans l'ordre) : ${kinds.join(", ")}. Extrais les informations du véhicule.`);
+}
+
+export function readMaintenancePhotos(images: ScanImage[], kinds: string[]) {
+  return read(maintenanceScanSchema, MAINTENANCE_PROMPT, images, `Photos fournies (dans l'ordre) : ${kinds.join(", ")}. Extrais les informations de l'intervention.`);
 }
 
 /** Compatibilité avec le registre des intégrations et la route des pièces jointes. */

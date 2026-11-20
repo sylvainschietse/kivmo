@@ -11,6 +11,7 @@ import { FUEL_LABELS, FUELS, type FuelCode } from "@/domain/types";
 import { Badge, Button, Card, EmptyState, ErrorFromQuery, Field, Input, Notice, OkFromQuery, PageHeader, Select, Table, Textarea } from "@/components/ui";
 import { VehicleFields } from "@/components/forms/vehicle-fields";
 import { VehicleScan } from "@/components/forms/vehicle-scan";
+import { MaintenanceScan } from "@/components/forms/maintenance-scan";
 import { ocrAvailable } from "@/integrations/ocr";
 import { signAttachmentUrl } from "@/server/auth";
 import { addMaintenanceAction, addReferenceAction, archiveVehicleAction, completeReminderAction, odometerReplacementAction, setConversionAction, updateVehicleAction } from "@/app/actions/vehicles";
@@ -126,19 +127,27 @@ export default async function VehiculeDetail({ params, searchParams }: { params:
             ) : <p className="text-sm text-muted">Aucune échéance.</p>}
             <p className="mb-2 mt-4 text-sm font-semibold">Historique (coût total {formatMoney(maintTotal)})</p>
             {maint.length ? (
-              <ul className="space-y-1 text-sm">{maint.map((m) => <li key={m.id}>{formatDate(m.occurredOn)} · {MAINT[m.kind] ?? m.kind}{m.cost ? ` · ${formatMoney(m.cost)}` : ""}{m.downtimeDays ? ` · ${m.downtimeDays} j d'immobilisation` : ""}{m.note ? ` · ${m.note}` : ""}</li>)}</ul>
+              <ul className="space-y-1 text-sm">
+                {maint.map((m) => (
+                  <li key={m.id}>
+                    {formatDate(m.occurredOn)} · {MAINT[m.kind] ?? m.kind}{m.odometerKm ? ` · ${formatKm(m.odometerKm)}` : ""}{m.cost ? ` · ${formatMoney(m.cost)}` : ""}{m.downtimeDays ? ` · ${m.downtimeDays} j d'immobilisation` : ""}{m.note ? ` · ${m.note}` : ""}
+                    {m.attachmentId && <> · <a href={signAttachmentUrl(m.attachmentId, 3600)} target="_blank" rel="noopener" className="font-semibold text-green underline">Voir la facture</a></>}
+                  </li>
+                ))}
+              </ul>
             ) : <p className="text-sm text-muted">Aucun entretien saisi.</p>}
           </div>
           <form action={addMaintenanceAction} className="grid gap-3 sm:grid-cols-2">
             <input type="hidden" name="vehicleId" value={id} />
+            <MaintenanceScan photoScan={ocrAvailable()} />
             <Field label="Enregistrer" htmlFor="mode"><Select id="mode" name="mode"><option value="evenement">Un entretien réalisé</option><option value="rappel">Une échéance à venir</option></Select></Field>
             <Field label="Nature" htmlFor="kind-m"><Select id="kind-m" name="kind">{Object.entries(MAINT).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
             <Field label="Date (réalisé)" htmlFor="occurredOn"><Input id="occurredOn" name="occurredOn" type="date" defaultValue={today} /></Field>
             <Field label="Coût (€)" htmlFor="cost-m"><Input id="cost-m" name="cost" inputMode="decimal" /></Field>
             <Field label="Kilométrage" htmlFor="odometerKm-m"><Input id="odometerKm-m" name="odometerKm" inputMode="numeric" /></Field>
             <Field label="Jours d'immobilisation" htmlFor="downtimeDays"><Input id="downtimeDays" name="downtimeDays" inputMode="numeric" /></Field>
-            <Field label="Échéance : date" htmlFor="dueOn"><Input id="dueOn" name="dueOn" type="date" /></Field>
-            <Field label="Échéance : kilométrage" htmlFor="dueOdometerKm"><Input id="dueOdometerKm" name="dueOdometerKm" inputMode="numeric" /></Field>
+            <Field label="Prochaine échéance : date" htmlFor="dueOn"><Input id="dueOn" name="dueOn" type="date" /></Field>
+            <Field label="Prochaine échéance : kilométrage" htmlFor="dueOdometerKm"><Input id="dueOdometerKm" name="dueOdometerKm" inputMode="numeric" /></Field>
             <div className="sm:col-span-2"><Field label="Note" htmlFor="note-m"><Textarea id="note-m" name="note" /></Field></div>
             <div><Button type="submit">Ajouter</Button></div>
           </form>

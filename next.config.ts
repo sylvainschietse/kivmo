@@ -10,6 +10,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["postgres"],
+  // Photos de factures d'entretien envoyées avec le formulaire (réduites sur le téléphone, environ 0,5 Mo).
+  experimental: { serverActions: { bodySizeLimit: "3mb" } },
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },

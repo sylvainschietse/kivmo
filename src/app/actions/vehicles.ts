@@ -1,11 +1,12 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, schema } from "@/db/client";
 import { requireSession } from "@/server/session";
 import { runAction, str, optStr } from "@/server/action";
-import { addReferenceProfile, archiveVehicle, createVehicle, declareOdometerReplacement, setActiveVehicle, setConversion, setVehiclePhoto, updateVehicle } from "@/server/services/vehicles";
+import { addReferenceProfile, archiveVehicle, createVehicle, declareOdometerReplacement, setActiveVehicle, setConversion, setVehiclePhoto, updateVehicle, decodePhotoDataUrl } from "@/server/services/vehicles";
+import { storeAttachment } from "@/server/services/attachments";
 import { createProject } from "@/server/services/savings";
 import { requireVehicle } from "@/server/authz";
 import { audit } from "@/server/audit";
@@ -112,12 +113,23 @@ export async function addMaintenanceAction(fd: FormData) {
   const id = str(fd, "vehicleId");
   await runAction(`/garage/${id}`, async () => {
     const db = getDb();
-    await requireVehicle(db, ctx, id, "write");
+    const { vehicle } = await requireVehicle(db, ctx, id, "write");
     const kind = str(fd, "kind");
+    const due = { dueOn: optStr(fd, "dueOn"), dueOdometerKm: optStr(fd, "dueOdometerKm")?.replace(/\s/g, "") ?? null };
     if (str(fd, "mode") === "rappel") {
-      await db.insert(schema.reminders).values({ vehicleId: id, kind, dueOn: optStr(fd, "dueOn"), dueOdometerKm: optStr(fd, "dueOdometerKm") });
+      await db.insert(schema.reminders).values({ vehicleId: id, kind, ...due });
     } else {
-      await db.insert(schema.maintenanceEvents).values({ vehicleId: id, kind, occurredOn: str(fd, "occurredOn"), odometerKm: optStr(fd, "odometerKm"), cost: optStr(fd, "cost")?.replace(",", ".") ?? null, downtimeDays: optStr(fd, "downtimeDays") ? Number(str(fd, "downtimeDays")) : null, note: optStr(fd, "note") });
+      // Facture ou procès-verbal photographié : conservé en privé et rattaché à l'intervention.
+      let attachmentId: string | null = null;
+      if (str(fd, "invoiceData")) {
+        const photo = decodePhotoDataUrl(str(fd, "invoiceData"), 2 * 1024 * 1024);
+        attachmentId = (await storeAttachment(db, ctx, { kind: "entretien", ...photo, organizationId: vehicle.organizationId })).attachment.id;
+      }
+      await db.insert(schema.maintenanceEvents).values({ vehicleId: id, kind, occurredOn: str(fd, "occurredOn"), odometerKm: optStr(fd, "odometerKm")?.replace(/\s/g, "") ?? null, cost: optStr(fd, "cost")?.replace(",", ".") ?? null, downtimeDays: optStr(fd, "downtimeDays") ? Number(str(fd, "downtimeDays")) : null, note: optStr(fd, "note"), attachmentId });
+      // L'intervention réalisée solde les échéances encore ouvertes de même nature (ex. le CT attendu).
+      await db.update(schema.reminders).set({ doneAt: new Date(), updatedAt: new Date() }).where(and(eq(schema.reminders.vehicleId, id), eq(schema.reminders.kind, kind), isNull(schema.reminders.doneAt)));
+      // Prochaine échéance indiquée avec l'intervention (ex. date limite du prochain contrôle technique).
+      if (due.dueOn || due.dueOdometerKm) await db.insert(schema.reminders).values({ vehicleId: id, kind, ...due });
     }
     await audit(db, { actorUserId: ctx.userId, action: "maintenance.add", resourceType: "vehicle", resourceId: id, details: { kind } });
     return `/garage/${id}?ok=${encodeURIComponent("Entretien enregistré.")}#entretien`;
