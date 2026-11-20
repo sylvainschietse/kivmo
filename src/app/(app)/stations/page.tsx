@@ -1,10 +1,11 @@
 import { Suspense } from "react";
+import { StationsMap, type MapPoint } from "@/components/stations-map";
 import { getDb } from "@/db/client";
 import { requireSession } from "@/server/session";
 import { favoriteStations, nearbyStations, searchStationsByText } from "@/server/services/stations";
 import { activeSponsoredOffers } from "@/server/services/partners";
 import { integrations } from "@/integrations/registry";
-import { lastImport } from "@/integrations/fuel-prices";
+import { lastImport, refreshAreaIfStale } from "@/integrations/fuel-prices";
 import { formatDateTime } from "@/lib/format";
 import { FUEL_LABELS, FUELS, type FuelCode } from "@/domain/types";
 import { Button, Card, EmptyState, ErrorFromQuery, Field, Input, IntegrationPill, Notice, OkFromQuery, PageHeader, Select } from "@/components/ui";
@@ -23,6 +24,8 @@ export default async function Stations({ searchParams }: { searchParams: Promise
   const lat = q.lat ? Number(q.lat) : NaN, lng = q.lng ? Number(q.lng) : NaN;
   const hasPos = Number.isFinite(lat) && Number.isFinite(lng);
   const includeDemo = ctx.isDemo;
+  // Prix officiels de la zone rafraîchis à la demande s'ils datent de plus de 3 h (sans bloquer en cas d'échec).
+  if (hasPos && !includeDemo) await refreshAreaIfStale(db, lat, lng, Number(q.rayon ?? 10) || 10).catch(() => undefined);
   const results = hasPos
     ? await nearbyStations(db, ctx, { lat, lng, radiusKm: Number(q.rayon ?? 10) || 10, fuel, maxPriceAgeHours: q.age ? Number(q.age) : null, excludeRupture: q.rupture === "1", openNow: q.ouvert === "1", brand: q.marque || null, service: q.service || null, includeDemo, limit: 30 })
     : q.q
@@ -34,6 +37,24 @@ export default async function Stations({ searchParams }: { searchParams: Promise
   const prices = integrations().find((i) => i.key === "fuel_prices");
   const imp = await lastImport(db);
   const precision = q.precision ? Number(q.precision) : null;
+  const priceFmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const kmFmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
+  const bestPrice = fuel && results ? Math.min(...results.map((v) => { const f = v.fuels.find((x) => x.fuel === fuel); return f?.price && !f.stale ? f.price.toNumber() : Infinity; })) : Infinity;
+  const points: MapPoint[] = (results ?? []).map((v) => {
+    const f = fuel ? v.fuels.find((x) => x.fuel === fuel) : undefined;
+    const price = f?.price ? f.price.toNumber() : null;
+    return {
+      id: v.station.id,
+      lat: v.station.lat,
+      lng: v.station.lng,
+      name: v.station.name ?? ([v.station.address, v.station.city].filter(Boolean).join(", ") || "Station"),
+      price: price !== null ? priceFmt.format(price) : null,
+      stale: f?.stale ?? false,
+      priceDate: f?.observedAt ? formatDateTime(f.observedAt) : null,
+      distance: v.crowFliesKm !== null ? `${kmFmt.format(v.crowFliesKm)} km` : null,
+      best: price !== null && price === bestPrice,
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -76,7 +97,9 @@ export default async function Stations({ searchParams }: { searchParams: Promise
       {results ? (
         results.length ? (
           <section aria-label="Résultats">
-            <h2 className="mb-2 text-sm font-semibold text-muted">{results.length} station(s){fuel ? ` proposant ${FUEL_LABELS[fuel]}` : ""}</h2>
+            <StationsMap points={points} center={hasPos ? { lat, lng } : null} fuelLabel={fuel ? FUEL_LABELS[fuel] : null} />
+            {!fuel && <p className="mt-2 text-xs text-muted">Choisissez un carburant dans les filtres pour afficher son prix sur la carte.</p>}
+            <h2 className="mb-2 mt-3 text-sm font-semibold text-muted">{results.length} station(s){fuel ? ` proposant ${FUEL_LABELS[fuel]}` : ""}</h2>
             <ul className="space-y-2">{results.map((v, i) => <li key={v.station.id}><StationCard v={v} fuel={fuel} rank={fuel ? i + 1 : undefined} /></li>)}</ul>
           </section>
         ) : (

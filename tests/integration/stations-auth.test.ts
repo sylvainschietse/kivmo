@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, makeUser, expectCode } from "./helpers";
 import { schema } from "@/db/client";
 import { nearbyStations, reportStation, stationDetail } from "@/server/services/stations";
-import { parseFeedRecord, upsertParsedStations, importFuelPrices } from "@/integrations/fuel-prices";
+import { parseFeedRecord, upsertParsedStations, importFuelPrices, importAllFuelPrices } from "@/integrations/fuel-prices";
 import { requestMagicLink, consumeMagicLink, resolveSession } from "@/server/auth";
 import { createDemoAccount } from "@/server/services/demo";
 import { homeData } from "@/server/services/dashboard";
@@ -36,6 +36,25 @@ describe("Import prix-carburants (fixture du flux officiel)", () => {
     expect(h.status).toBe("erreur");
     const obs = await db().select().from(schema.priceObservations);
     expect(obs.length).toBeGreaterThan(0);
+  });
+
+  it("import de toute la France via l'export JSON : une seule requête, par lots, idempotent", async () => {
+    const urls: string[] = [];
+    // 1 200 stations : plusieurs lots de 500 et des identifiants en double dans le flux.
+    const many = Array.from({ length: 1200 }, (_, i) => ({ ...feed.results[i % feed.results.length], id: 900000 + (i % 1100) }));
+    const exp = (async (u: URL | string) => {
+      urls.push(String(u));
+      return new Response(JSON.stringify(many), { status: 200 });
+    }) as unknown as typeof fetch;
+    const r1 = await importAllFuelPrices(db(), { fetchImpl: exp });
+    expect(r1.ok).toBe(true);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toMatch(/\/exports\/json$/);
+    if (r1.ok) expect(r1.stations).toBe(1100);
+    const r2 = await importAllFuelPrices(db(), { fetchImpl: exp });
+    if (r2.ok) expect(r2.observations).toBe(0);
+    const [h] = await db().select().from(schema.integrationHealth).where(eq(schema.integrationHealth.key, "prix-carburants"));
+    expect(h.status).toBe("ok");
   });
 
   it("import paginé via l'API (fetch simulé)", async () => {

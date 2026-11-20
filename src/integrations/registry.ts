@@ -38,16 +38,17 @@ export function integrations(): IntegrationInfo[] {
       status: env.fuelPricesEnabled ? "connecte" : "a_connecter",
       detail: env.fuelPricesEnabled
         ? "Import serveur périodique avec cache ; derniers prix datés conservés."
-        : "Activer FUEL_PRICES_SOURCE=prix-carburants après vérification des conditions de la source officielle.",
+        : "Désactivé (FUEL_PRICES_SOURCE=off).",
       fallback: "Derniers prix datés connus et saisie manuelle du prix.",
       envVars: ["FUEL_PRICES_SOURCE", "FUEL_PRICES_API_URL", "CRON_SECRET"],
     },
     {
       key: "map_tiles",
       label: "Fond de carte",
-      // Aucun composant de carte n'est livré : l'état reste « à connecter » même si une URL est fournie.
-      status: "a_connecter",
-      detail: "Fournisseur de tuiles à choisir (quotas, licence, attribution), puis composant de carte à brancher sur la liste existante.",
+      status: "connecte",
+      detail: process.env.NEXT_PUBLIC_MAP_TILE_URL
+        ? "Carte Leaflet avec le fournisseur de tuiles configuré."
+        : "Carte Leaflet avec les tuiles OpenStreetMap (usage modéré, attribution affichée). Un fournisseur dédié peut être configuré si l'usage grandit.",
       fallback: "Liste des stations, liens vers l'application de navigation.",
       envVars: ["NEXT_PUBLIC_MAP_TILE_URL", "NEXT_PUBLIC_MAP_ATTRIBUTION"],
     },
