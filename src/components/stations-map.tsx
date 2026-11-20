@@ -9,6 +9,8 @@ export interface MapPoint {
   lat: number;
   lng: number;
   name: string;
+  /** Enseigne, si différente du nom. */
+  brand?: string | null;
   /** Prix du carburant choisi, déjà formaté (ex. « 1,789 € »), ou null s'il est inconnu. */
   price: string | null;
   /** Prix daté de plus de 48 h : affiché atténué. */
@@ -50,7 +52,7 @@ export function StationsMap({ points, center, fuelLabel }: { points: MapPoint[];
         const cls = ["kivmo-pin", p.best ? "kivmo-pin-best" : "", p.stale ? "kivmo-pin-stale" : ""].join(" ");
         const icon = L.divIcon({ className: "", html: `<span class="${cls}">${esc(label)}</span>`, iconSize: undefined, iconAnchor: [0, 0] });
         const popup = [
-          `<strong>${esc(p.name)}</strong>`,
+          `<strong>${esc(p.name)}</strong>${p.brand ? ` <span style="opacity:.7">${esc(p.brand)}</span>` : ""}`,
           p.price && fuelLabel ? `${esc(fuelLabel)} : <strong>${esc(p.price)}</strong>${p.priceDate ? ` <span style="opacity:.7">(${esc(p.priceDate)})</span>` : ""}` : fuelLabel ? `${esc(fuelLabel)} : prix inconnu` : "",
           p.distance ? `À ${esc(p.distance)} à vol d'oiseau` : "",
           `<a href="/stations/${encodeURIComponent(p.id)}">Voir la station</a>`,

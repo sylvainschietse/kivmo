@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { stationTitle } from "@/integrations/station-names";
 import { StationsMap, type MapPoint } from "@/components/stations-map";
 import { getDb } from "@/db/client";
 import { requireSession } from "@/server/session";
@@ -47,7 +48,8 @@ export default async function Stations({ searchParams }: { searchParams: Promise
       id: v.station.id,
       lat: v.station.lat,
       lng: v.station.lng,
-      name: v.station.name ?? ([v.station.address, v.station.city].filter(Boolean).join(", ") || "Station"),
+      name: stationTitle(v.station),
+      brand: v.station.brand && v.station.brand !== v.station.name ? v.station.brand : null,
       price: price !== null ? priceFmt.format(price) : null,
       stale: f?.stale ?? false,
       priceDate: f?.observedAt ? formatDateTime(f.observedAt) : null,

@@ -1,4 +1,5 @@
 import { ocrAvailable } from "@/integrations/ocr";
+import { stationTitle } from "@/integrations/station-names";
 import { and, desc, eq, isNull, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db/client";
 import { requireSession } from "@/server/session";
@@ -36,7 +37,7 @@ export default async function NouveauPlein({ searchParams }: { searchParams: Pro
   let initialStation: StationOption | null = null;
   if (q.station && /^[0-9a-f-]{36}$/.test(q.station)) {
     const v = await stationDetail(db, ctx, q.station, null).catch(() => null);
-    if (v) initialStation = { id: v.station.id, name: v.station.name ?? v.station.address, address: [v.station.address, v.station.postalCode, v.station.city].filter(Boolean).join(" "), crowFliesKm: null, isDemo: v.station.isDemo, fuels: v.fuels.map((f) => ({ fuel: f.fuel, price: f.price?.toString() ?? null, observedAt: f.observedAt?.toISOString() ?? null, stale: f.stale, availability: f.availability })) };
+    if (v) initialStation = { id: v.station.id, name: stationTitle(v.station), address: [v.station.address, v.station.postalCode, v.station.city].filter(Boolean).join(" "), crowFliesKm: null, isDemo: v.station.isDemo, fuels: v.fuels.map((f) => ({ fuel: f.fuel, price: f.price?.toString() ?? null, observedAt: f.observedAt?.toISOString() ?? null, stale: f.stale, availability: f.availability })) };
   }
   const def = vehicles.find((v) => v.id === profile?.activeVehicleId) ?? vehicles[0];
   return (

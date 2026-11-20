@@ -1,4 +1,5 @@
 import { getDb } from "@/db/client";
+import { stationTitle } from "@/integrations/station-names";
 import { requireSession } from "@/server/session";
 import { homeData } from "@/server/services/dashboard";
 import { stationDetail } from "@/server/services/stations";
@@ -24,7 +25,7 @@ export default async function Trajets({ searchParams }: { searchParams: Promise<
     <div className="space-y-4">
       <PageHeader title="Trajets et détours" subtitle="Décider si un détour vaut le coup et estimer le carburant d'un voyage." action={routing ? <IntegrationPill status={routing.status} /> : null} />
       {routing?.status === "a_connecter" && <Notice tone="info">Le calcul d&apos;itinéraire routier n&apos;est pas connecté : saisissez les distances (lues dans votre GPS). KIVMO n&apos;invente jamais une distance routière.</Notice>}
-      <Card title={station ? `Détour vers ${station.station.name ?? station.station.city}` : "Ce détour vaut-il le coup ?"}>
+      <Card title={station ? `Détour vers ${stationTitle(station.station)}` : "Ce détour vaut-il le coup ?"}>
         {station && <p className="mb-2 text-sm text-muted">{sp ? `Prix ${FUEL_LABELS[sp.fuel]} prérempli depuis le relevé officiel.` : "Aucun prix récent pour votre carburant dans cette station : saisissez-le."}</p>}
         <DetourCalculator defaults={{ detourPrice: sp?.price ? sp.price.toString().replace(".", ",") : "", consumption, volume: s?.vehicle.tankCapacityL ? String(Math.round(Number(s.vehicle.tankCapacityL) * 0.8)) : "" }} />
       </Card>
