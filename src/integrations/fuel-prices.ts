@@ -58,6 +58,22 @@ function fuelFromLabel(label: string): FuelCode | null {
   return FUEL_MAP[k] ?? null;
 }
 
+/**
+ * Le flux publie l'heure légale française suivie de « +00:00 » (constaté : des mises à jour
+ * datées dans le futur). On lit donc la date et l'heure telles quelles, comme heure de Paris.
+ */
+export function parseFeedDate(raw: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(raw);
+  if (!m) return new Date(raw);
+  const [, y, mo, d, h, mi, se] = m.map(Number) as number[];
+  const asUtc = Date.UTC(y, mo - 1, d, h, mi, se || 0);
+  // Décalage de Paris à cet instant (1 h en hiver, 2 h en été).
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(asUtc));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+  const parisAsUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return new Date(asUtc - (parisAsUtc - asUtc));
+}
+
 /** Analyse tolérante d'un enregistrement : un champ manquant n'invente jamais de valeur. */
 export function parseFeedRecord(r: FeedRecord): ParsedStation | null {
   let lat: number | null = r.geom?.lat ?? null;
@@ -71,7 +87,7 @@ export function parseFeedRecord(r: FeedRecord): ParsedStation | null {
     const m = r[`${key}_maj`];
     if (p !== null && p !== undefined && p !== "" && m) {
       const price = String(p);
-      const observedAt = new Date(String(m));
+      const observedAt = parseFeedDate(String(m));
       if (/^\d+(\.\d+)?$/.test(price) && !Number.isNaN(observedAt.getTime())) prices.push({ fuel, price, observedAt });
     }
   }
