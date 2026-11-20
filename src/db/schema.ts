@@ -45,6 +45,7 @@ export const reportStatus = pgEnum("report_status", ["en_attente", "accepte", "r
 export const users = pgTable("users", {
   id: id(),
   email: text("email").notNull(),
+  passwordHash: text("password_hash"),
   displayName: text("display_name"),
   accountKind: accountKind("account_kind").notNull().default("particulier"),
   isDemo: boolean("is_demo").notNull().default(false),

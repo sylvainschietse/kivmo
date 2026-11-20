@@ -6,7 +6,7 @@ import { formatDateTime } from "@/lib/format";
 import { Badge, Button, Card, ErrorFromQuery, Field, Input, Notice, OkFromQuery, PageHeader, Select } from "@/components/ui";
 import { ThemeSelect } from "@/components/theme-select";
 import { InstallApp } from "@/components/install-app";
-import { createReferralAction, deleteAccountAction, revokeConsentAction, updateNotificationPrefsAction, updateProfileAction } from "@/app/actions/profile";
+import { changePasswordAction, createReferralAction, deleteAccountAction, revokeConsentAction, updateNotificationPrefsAction, updateProfileAction } from "@/app/actions/profile";
 import { logoutAction } from "@/app/actions/auth";
 
 export const metadata = { title: "Profil et paramètres" };
@@ -41,6 +41,21 @@ export default async function Profil({ searchParams }: { searchParams: Promise<{
           <div><Button type="submit">Enregistrer</Button></div>
         </form>
       </Card>
+
+      {!ctx.isDemo && (
+        <Card title="Mot de passe">
+          <form id="mot-de-passe" action={changePasswordAction} className="grid gap-3 sm:grid-cols-2">
+            {user.passwordHash && (
+              <Field label="Mot de passe actuel" htmlFor="current"><Input id="current" name="current" type="password" autoComplete="current-password" required /></Field>
+            )}
+            <Field label={user.passwordHash ? "Nouveau mot de passe" : "Choisir un mot de passe"} htmlFor="new-password" hint="Au moins 10 caractères.">
+              <Input id="new-password" name="next" type="password" autoComplete="new-password" required minLength={10} maxLength={200} />
+            </Field>
+            <Field label="Confirmer" htmlFor="confirm-password"><Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" required minLength={10} maxLength={200} /></Field>
+            <div className="sm:col-span-2"><Button type="submit">Enregistrer le mot de passe</Button></div>
+          </form>
+        </Card>
+      )}
 
       <Card title="Application sur téléphone">
         <InstallApp />

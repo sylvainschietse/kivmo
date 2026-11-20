@@ -11,7 +11,7 @@ import { AppError } from "@/server/errors";
 import { audit } from "@/server/audit";
 import { markAllRead, updatePreferences, NOTIFICATION_KINDS } from "@/server/services/notifications";
 import { deleteAccount } from "@/server/services/exports";
-import { SESSION_COOKIE, destroySession } from "@/server/auth";
+import { SESSION_COOKIE, changePassword, destroySession } from "@/server/auth";
 
 const ok = (msg: string) => `/profil?ok=${encodeURIComponent(msg)}`;
 
@@ -83,5 +83,15 @@ export async function deleteAccountAction(fd: FormData) {
     if (t) await destroySession(db, t).catch(() => undefined);
     await clearSessionCookie();
     return "/?ok=" + encodeURIComponent("Compte supprimé.");
+  });
+}
+
+export async function changePasswordAction(fd: FormData) {
+  const { ctx } = await requireSession();
+  const next = String(fd.get("next") ?? "");
+  if (next !== String(fd.get("confirm") ?? "")) redirect("/profil?erreur=" + encodeURIComponent("Les deux mots de passe ne sont pas identiques.") + "#mot-de-passe");
+  await runAction("/profil", async () => {
+    await changePassword(getDb(), ctx.userId, String(fd.get("current") ?? ""), next);
+    return ok("Mot de passe enregistré.");
   });
 }

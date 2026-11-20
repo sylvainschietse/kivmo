@@ -25,7 +25,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             Suivez vos pleins, mesurez votre vraie consommation, comparez honnêtement à votre référence et transformez les économies observées en projets.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/connexion" className="tap inline-flex items-center justify-center rounded-xl bg-green px-5 py-3 font-semibold text-green-ink">Créer mon compte gratuit</Link>
+            <Link href="/connexion?mode=creation" className="tap inline-flex items-center justify-center rounded-xl bg-green px-5 py-3 font-semibold text-green-ink">Créer mon compte gratuit</Link>
             <form action={startDemoAction}>
               <Button variant="lime" type="submit" className="px-5 py-3">Découvrir en mode démo</Button>
             </form>
