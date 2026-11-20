@@ -37,7 +37,7 @@ La correspondance complète exigences ↔ écrans ↔ tables ↔ API ↔ tests e
 | Épargne automatique | **À connecter** | refus explicite (« exige un prestataire et une banque compatibles ») | dépend du prestataire bancaire |
 | Fond de carte | **À connecter** | liste classée, distances à vol d'oiseau identifiées, liens Google Maps, Waze, Plans, OpenStreetMap | choisir un fournisseur de tuiles (licence, quotas, attribution), ajouter le composant de carte |
 | Itinéraire routier | **À connecter** | aucune distance routière inventée ; saisie manuelle des kilomètres | adaptateur `RoutingProvider` (`src/integrations/routing.ts`) |
-| Lecture des tickets (OCR) | **À connecter** | ticket conservé en privé, formulaire manuel | adaptateur `OcrProvider` (`src/integrations/ocr.ts`) avec confiance par champ |
+| Lecture des photos (compteur, pompe, ticket, carte grise) | **Branché** (actif dès que `ANTHROPIC_API_KEY` est renseignée) | formulaire manuel | service de vision Claude (`src/integrations/ocr.ts`, route `/api/scan`) ; valeurs proposées, surlignées, toujours vérifiées avant enregistrement |
 | Notifications push | **À connecter** | centre de notifications dans l'application, préférences, plafond quotidien | clés VAPID et service d'envoi |
 | Facturation professionnelle | **À connecter** | abonnements suivis sans aucun tarif inventé | prestataire de paiement et grille tarifaire |
 | Recherche par immatriculation | **À connecter** | saisie manuelle du véhicule | fournisseur autorisé |
@@ -73,8 +73,8 @@ Les parcours ont révélé trois défauts, corrigés et couverts par un test :
   inaccessible depuis le réseau de développement, donc l'importeur n'a été validé que sur un extrait enregistré du flux.
 - **Carte** : pas de carte interactive tant qu'un fournisseur de tuiles n'est pas choisi.
 - **Bilan environnemental** : non livré, faute de facteurs d'émission documentés fournis.
-- **Stockage des pièces jointes** : disque local privé (`STORAGE_DIR`). Un hébergement sans disque persistant
-  demande un stockage objet privé (adaptateur à écrire).
+- **Stockage des pièces jointes** : disque local privé (`STORAGE_DIR`) en local ; dans PostgreSQL sur Vercel
+  (`STORAGE_BACKEND=db`). Un stockage objet privé reste préférable si les volumes grossissent.
 - **Accessibilité** : clavier, focus visible, zones de 44 px, libellés, contrastes de la palette et animations
   réduites sont traités ; un audit WCAG 2.2 complet avec lecteur d'écran reste à mener.
 - **Hors ligne** : la file de pleins est stockée sur l'appareil (30 jours) et envoyée seulement à la demande ;

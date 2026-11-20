@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getDb, schema } from "@/db/client";
 import { requireSession } from "@/server/session";
 import { runAction, str, optStr } from "@/server/action";
-import { addReferenceProfile, archiveVehicle, createVehicle, declareOdometerReplacement, setActiveVehicle, setConversion, updateVehicle } from "@/server/services/vehicles";
+import { addReferenceProfile, archiveVehicle, createVehicle, declareOdometerReplacement, setActiveVehicle, setConversion, setVehiclePhoto, updateVehicle } from "@/server/services/vehicles";
 import { createProject } from "@/server/services/savings";
 import { requireVehicle } from "@/server/authz";
 import { audit } from "@/server/audit";
@@ -34,6 +34,7 @@ export async function createVehicleAction(fd: FormData) {
   const back = str(fd, "back") || "/garage/nouveau";
   await runAction(back, async () => {
     const v = await createVehicle(getDb(), ctx, vehicleFromForm(fd));
+    if (str(fd, "photoData")) await setVehiclePhoto(getDb(), ctx, v.id, str(fd, "photoData"));
     revalidatePath("/garage");
     return str(fd, "after") || `/garage/${v.id}?ok=${encodeURIComponent("Véhicule enregistré.")}`;
   });
@@ -46,6 +47,8 @@ export async function updateVehicleAction(fd: FormData) {
     const { organizationId: _o, ...patch } = vehicleFromForm(fd);
     void _o;
     await updateVehicle(getDb(), ctx, id, patch, Number(str(fd, "version")));
+    if (str(fd, "photoData")) await setVehiclePhoto(getDb(), ctx, id, str(fd, "photoData"));
+    revalidatePath("/garage");
     return `/garage/${id}?ok=${encodeURIComponent("Modifications enregistrées.")}`;
   });
 }
@@ -140,6 +143,7 @@ export async function onboardingAction(fd: FormData) {
     const kind = str(fd, "accountKind") as "particulier";
     await db.update(schema.users).set({ accountKind: kind || "particulier", onboardedAt: new Date(), updatedAt: new Date() }).where(eq(schema.users.id, ctx.userId));
     const v = await createVehicle(db, ctx, vehicleFromForm(fd));
+    if (str(fd, "photoData")) await setVehiclePhoto(db, ctx, v.id, str(fd, "photoData"));
     if (str(fd, "refConsumption")) {
       await addReferenceProfile(db, ctx, v.id, {
         kind: (str(fd, "refKind") || "ancien_vehicule") as "ancien_vehicule",

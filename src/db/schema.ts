@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  customType,
   date,
   doublePrecision,
   index,
@@ -314,6 +315,9 @@ export const favoriteStations = pgTable("favorite_stations", {
 
 /* ───────────── Pleins ───────────── */
 
+/** Contenu binaire stocké en base (pièces jointes durables quand le disque du serveur est éphémère). */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
 export const attachments = pgTable("attachments", {
   id: id(),
   ownerUserId: uuid("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -324,6 +328,8 @@ export const attachments = pgTable("attachments", {
   sizeBytes: integer("size_bytes").notNull(),
   sha256: text("sha256").notNull(),
   ocrResult: jsonb("ocr_result"),
+  /** Contenu du fichier quand STORAGE_BACKEND=db (par défaut sur Vercel) ; sinon null et fichier sur disque. */
+  data: bytea("data"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [uniqueIndex("attachments_owner_hash_uq").on(t.ownerUserId, t.sha256, t.kind)]);

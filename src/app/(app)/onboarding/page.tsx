@@ -2,6 +2,8 @@ import Link from "next/link";
 import { onboardingAction } from "@/app/actions/vehicles";
 import { Button, Card, ErrorFromQuery, Field, Input, Notice, PageHeader, Select } from "@/components/ui";
 import { VehicleFields } from "@/components/forms/vehicle-fields";
+import { VehicleScan } from "@/components/forms/vehicle-scan";
+import { ocrAvailable } from "@/integrations/ocr";
 import { FUEL_LABELS, FUELS } from "@/domain/types";
 
 export const metadata = { title: "Bienvenue" };
@@ -40,6 +42,7 @@ export default async function Onboarding({ searchParams }: { searchParams: Promi
           </Field>
         </Card>
         <Card title="2. Votre véhicule">
+          <VehicleScan photoScan={ocrAvailable()} />
           <VehicleFields d={m?.vehicle} />
         </Card>
         <Card title="3. Référence de comparaison (facultatif)">

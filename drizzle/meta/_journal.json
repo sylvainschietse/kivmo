@@ -15,6 +15,13 @@
       "when": 1795212158433,
       "tag": "0001_mot_de_passe",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795213123828,
+      "tag": "0002_stockage_fichiers_en_base",
+      "breakpoints": true
     }
   ]
 }

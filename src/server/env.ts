@@ -38,7 +38,19 @@ export const env = {
     return process.env.ROUTING_PROVIDER ?? "";
   },
   get ocrProvider() {
-    return process.env.OCR_PROVIDER ?? "";
+    return process.env.OCR_PROVIDER ?? (process.env.ANTHROPIC_API_KEY ? "anthropic" : "");
+  },
+  get anthropicApiKey() {
+    return process.env.ANTHROPIC_API_KEY ?? "";
+  },
+  get ocrModel() {
+    return process.env.OCR_MODEL ?? "claude-opus-5-5";
+  },
+  /** « db » : fichiers stockés dans PostgreSQL (durable sur Vercel, dont le disque est éphémère). */
+  get storageBackend(): "db" | "disk" {
+    const b = process.env.STORAGE_BACKEND;
+    if (b === "db" || b === "disk") return b;
+    return process.env.VERCEL ? "db" : "disk";
   },
   get bankProvider() {
     return process.env.BANK_PROVIDER ?? "";

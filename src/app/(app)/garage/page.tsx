@@ -5,6 +5,8 @@ import { listVehicles } from "@/server/services/vehicles";
 import { Badge, Card, EmptyState, LinkButton, OkFromQuery, PageHeader } from "@/components/ui";
 import { ENERGY_OPTIONS } from "@/components/forms/vehicle-fields";
 import { formatKm } from "@/lib/format";
+import { signAttachmentUrl } from "@/server/auth";
+import { IconCamera } from "@/components/icons";
 
 export const metadata = { title: "Garage" };
 
@@ -25,8 +27,18 @@ export default async function Garage({ searchParams }: { searchParams: Promise<{
             <li key={v.id}>
               <Link href={`/garage/${v.id}`} className="block h-full">
                 <Card className="h-full hover:border-green">
-                  <p className="text-lg font-bold">{v.name}</p>
-                  <p className="text-sm text-muted">{[v.make, v.model, v.year].filter(Boolean).join(" ") || "—"}</p>
+                  <div className="flex items-center gap-3">
+                    {v.photoAttachmentId ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={signAttachmentUrl(v.photoAttachmentId, 3600)} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
+                    ) : (
+                      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted"><IconCamera width={22} /></span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-bold">{v.name}</p>
+                      <p className="truncate text-sm text-muted">{[v.make, v.model, v.year].filter(Boolean).join(" ") || "—"}{v.plate ? ` · ${v.plate}` : ""}</p>
+                    </div>
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Badge>{energy[v.energy] ?? v.energy}</Badge>
                     {v.archivedAt && <Badge tone="warn">Archivé</Badge>}

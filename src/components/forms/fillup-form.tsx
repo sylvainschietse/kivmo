@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Card, Field, Input, Notice, Select, cx } from "@/components/ui";
 import { IconCamera, IconLocate, IconMic, IconPlus } from "@/components/icons";
 import { enqueueFillup, readQueue, sendFillup, writeQueue, type QueuedFillup } from "@/components/offline-queue";
+import { PhotoButton, scanPhotos, type ScanState } from "@/components/photo-scan";
 
 type Fuel = "E85" | "SP95" | "SP95_E10" | "SP98" | "GAZOLE" | "GPL" | "ELEC_KWH";
 const FUEL_LABELS: Record<Fuel, string> = { E85: "E85", SP95: "SP95", SP95_E10: "SP95-E10", SP98: "SP98", GAZOLE: "Gazole", GPL: "GPL", ELEC_KWH: "Électricité (kWh)" };
@@ -34,6 +35,20 @@ export interface FillupFormProps {
   referenceNeedsPrice: Record<string, { fuel: Fuel; label: string } | null>;
   lastOdometer: Record<string, string | null>;
   initialStation?: StationOption | null;
+  /** Lecture automatique des photos disponible (clé du service de vision configurée). */
+  photoScan?: boolean;
+}
+
+interface FillupScanResult {
+  odometerKm: string | null;
+  liters: string | null;
+  unitPrice: string | null;
+  total: string | null;
+  fuel: Fuel | null;
+  date: string | null;
+  stationName: string | null;
+  confidence: "haute" | "moyenne" | "basse";
+  note: string | null;
 }
 
 const num = (s: string) => {
@@ -94,6 +109,9 @@ export function FillupForm(p: FillupFormProps) {
   const [dictation, setDictation] = useState<string | null>(null);
   const [queue, setQueue] = useState<QueuedFillup[]>([]);
   const submitting = useRef(false);
+  const [scan, setScan] = useState<Record<"compteur" | "pompe", ScanState>>({ compteur: { status: "idle" }, pompe: { status: "idle" } });
+  const [fromPhoto, setFromPhoto] = useState<Record<string, boolean>>({});
+  const photoRing = (k: string) => (fromPhoto[k] ? "ring-2 ring-green" : "");
 
   useEffect(() => {
     // Valeurs propres au navigateur (identifiant, heure locale, file hors ligne) : posées après l'hydratation.
@@ -182,6 +200,46 @@ export function FillupForm(p: FillupFormProps) {
     } catch {
       setUploadMsg("Hors ligne : le ticket pourra être ajouté plus tard depuis la fiche du plein.");
     }
+  }
+
+  /** Photo du compteur ou de la pompe : les valeurs lues pré-remplissent le formulaire, à vérifier. */
+  async function readPhoto(kind: "compteur" | "pompe", file: File) {
+    setScan((s) => ({ ...s, [kind]: { status: "reading" } }));
+    const r = await scanPhotos<FillupScanResult>("fillup", { [kind === "pompe" ? "pompe" : "compteur"]: file });
+    if (!r.ok) return setScan((s) => ({ ...s, [kind]: { status: "error", message: r.message } }));
+    const x = r.result;
+    const filled: string[] = [];
+    const marks: Record<string, boolean> = {};
+    const digits = x.odometerKm?.replace(/\D/g, "") ?? "";
+    if (digits) {
+      setOdometer(digits);
+      marks.odometer = true;
+      filled.push(`compteur ${Number(digits).toLocaleString("fr-FR")} km`);
+    }
+    const dec = (v: string | null) => (v && num(v) !== null ? v.replace(".", ",") : "");
+    const L = dec(x.liters), P = dec(x.unitPrice), T = dec(x.total);
+    if (L || P || T || x.fuel) {
+      setLines((ls) => ls.map((l, j) => {
+        if (j !== 0) return l;
+        const next: Line = { ...l, fuel: x.fuel ?? l.fuel, liters: L || (l.computed === "liters" ? "" : l.liters), unitPrice: P || (l.computed === "unitPrice" ? "" : l.unitPrice), amount: T || (l.computed === "amount" ? "" : l.amount), computed: null };
+        return recompute(next);
+      }));
+      setMismatch(null);
+      if (x.fuel) { marks.fuel = true; filled.push(FUEL_LABELS[x.fuel]); }
+      if (L) { marks.liters = true; filled.push(`${L} L`); }
+      if (P) { marks.unitPrice = true; filled.push(`${P} €/L`); }
+      if (T) { marks.amount = true; filled.push(`${T} €`); }
+    }
+    if (x.date && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(x.date) && x.date <= localNow()) { setOccurredAt(x.date); marks.occurredAt = true; }
+    if (x.stationName && !stationLabel) { setStationLabel(x.stationName); marks.station = true; }
+    setFromPhoto((m) => ({ ...m, ...marks }));
+    const doubt = x.confidence !== "haute" ? " Lecture incertaine : vérifiez bien." : "";
+    setScan((s) => ({
+      ...s,
+      [kind]: filled.length
+        ? { status: "done", message: `Lu : ${filled.join(" · ")}.${doubt}${x.note ? ` ${x.note}` : ""}` }
+        : { status: "error", message: x.note ?? "Rien de lisible sur cette photo. Reprenez-la de plus près, ou saisissez à la main." },
+    }));
   }
 
   function dictate() {
@@ -305,6 +363,15 @@ export function FillupForm(p: FillupFormProps) {
         </Card>
       )}
 
+      {p.photoScan && (
+        <Card title="Remplir avec des photos" action={<span className="text-xs text-muted">À vérifier ensuite</span>}>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <PhotoButton label="Photo du compteur" hint="Le kilométrage se remplit tout seul." state={scan.compteur} onPhoto={(f) => readPhoto("compteur", f)} />
+            <PhotoButton label="Photo de la pompe" hint="Litres, prix au litre, montant et carburant. Un ticket marche aussi." state={scan.pompe} onPhoto={(f) => readPhoto("pompe", f)} />
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Véhicule" htmlFor="vehicleId">
@@ -313,10 +380,10 @@ export function FillupForm(p: FillupFormProps) {
             </Select>
           </Field>
           <Field label="Date et heure" htmlFor="occurredAt">
-            <Input id="occurredAt" type="datetime-local" value={occurredAt} max={localNow()} onChange={(e) => setOccurredAt(e.target.value)} required />
+            <Input id="occurredAt" type="datetime-local" className={photoRing("occurredAt")} value={occurredAt} max={localNow()} onChange={(e) => setOccurredAt(e.target.value)} required />
           </Field>
           <Field label="Compteur (km)" htmlFor="odometer" hint={p.lastOdometer[vehicleId] ? `Dernier relevé : ${p.lastOdometer[vehicleId]} km` : undefined}>
-            <Input id="odometer" inputMode="numeric" autoComplete="off" value={odometer} onChange={(e) => setOdometer(e.target.value)} required />
+            <Input id="odometer" inputMode="numeric" autoComplete="off" className={photoRing("odometer")} value={odometer} onChange={(e) => setOdometer(e.target.value)} required />
           </Field>
           <fieldset className="flex flex-col gap-1">
             <legend className="text-sm font-medium">Type de plein</legend>
@@ -337,18 +404,18 @@ export function FillupForm(p: FillupFormProps) {
           {lines.map((l, i) => (
             <div key={i} className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               <Field label={lines.length > 1 ? `Carburant ${i + 1}` : "Carburant"} htmlFor={`fuel-${i}`}>
-                <Select id={`fuel-${i}`} value={l.fuel} onChange={(e) => setLine(i, { fuel: e.target.value as Fuel })}>
+                <Select id={`fuel-${i}`} className={i === 0 ? photoRing("fuel") : ""} value={l.fuel} onChange={(e) => setLine(i, { fuel: e.target.value as Fuel })}>
                   {(Object.keys(FUEL_LABELS) as Fuel[]).map((f) => <option key={f} value={f}>{FUEL_LABELS[f]}</option>)}
                 </Select>
               </Field>
               <Field label={l.fuel === "ELEC_KWH" ? "kWh" : "Litres"} htmlFor={`liters-${i}`} hint={l.computed === "liters" ? "calculé" : undefined}>
-                <Input id={`liters-${i}`} inputMode="decimal" value={l.liters} onChange={(e) => setLine(i, { liters: e.target.value }, "liters")} className={l.computed === "liters" ? "bg-surface-2" : ""} />
+                <Input id={`liters-${i}`} inputMode="decimal" value={l.liters} onChange={(e) => setLine(i, { liters: e.target.value }, "liters")} className={cx(l.computed === "liters" && "bg-surface-2", i === 0 && photoRing("liters"))} />
               </Field>
               <Field label="Prix affiché (€/L)" htmlFor={`price-${i}`} hint={l.computed === "unitPrice" ? "calculé" : undefined}>
-                <Input id={`price-${i}`} inputMode="decimal" value={l.unitPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value }, "unitPrice")} className={l.computed === "unitPrice" ? "bg-surface-2" : ""} />
+                <Input id={`price-${i}`} inputMode="decimal" value={l.unitPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value }, "unitPrice")} className={cx(l.computed === "unitPrice" && "bg-surface-2", i === 0 && photoRing("unitPrice"))} />
               </Field>
               <Field label="Total payé (€)" htmlFor={`amount-${i}`} hint={l.computed === "amount" ? "calculé — le ticket fait foi" : "le ticket fait foi"}>
-                <Input id={`amount-${i}`} inputMode="decimal" value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value }, "amount")} className={l.computed === "amount" ? "bg-surface-2" : ""} />
+                <Input id={`amount-${i}`} inputMode="decimal" value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value }, "amount")} className={cx(l.computed === "amount" && "bg-surface-2", i === 0 && photoRing("amount"))} />
               </Field>
               <Field label="Remise (€)" htmlFor={`discount-${i}`}>
                 <Input id={`discount-${i}`} inputMode="decimal" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} />
@@ -408,7 +475,7 @@ export function FillupForm(p: FillupFormProps) {
             </ul>
           )}
           <Field label="Nom de la station" htmlFor="stationLabel" hint={station ? "Station sélectionnée : le prix proposé est daté et modifiable, le ticket fait foi." : "Station non référencée : saisissez son nom."}>
-            <Input id="stationLabel" value={stationLabel} onChange={(e) => { setStationLabel(e.target.value); if (station && e.target.value !== (station.name ?? station.address)) setStation(null); }} />
+            <Input id="stationLabel" className={photoRing("station")} value={stationLabel} onChange={(e) => { setStationLabel(e.target.value); if (station && e.target.value !== (station.name ?? station.address)) setStation(null); }} />
           </Field>
           {refInfo && (
             <Field label={`Prix de référence ${refInfo.label} (€/L, facultatif)`} htmlFor="refPrice" hint="Sans prix daté disponible, la comparaison de cet intervalle sera « incomplète » (jamais zéro).">
