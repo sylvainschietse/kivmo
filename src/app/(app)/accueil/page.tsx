@@ -7,6 +7,7 @@ import { Badge, Card, EmptyState, ErrorFromQuery, LinkButton, Notice, OkFromQuer
 import { setActiveVehicleAction } from "@/app/actions/vehicles";
 import { ISSUE_MESSAGES } from "@/domain/consumption";
 import { progressRatio } from "@/domain/savings";
+import { InstallApp } from "@/components/install-app";
 
 export const metadata = { title: "Accueil" };
 
@@ -41,6 +42,7 @@ export default async function Accueil({ searchParams }: { searchParams: Promise<
     <div className="space-y-4">
       <OkFromQuery ok={q.ok} />
       <ErrorFromQuery error={q.erreur} />
+      <InstallApp dismissible />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-muted">Véhicule actif</p>

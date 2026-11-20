@@ -16,7 +16,7 @@ export default defineConfig({
   projects: [
     { name: "mobile-360", use: { ...devices["Desktop Chrome"], viewport: { width: 360, height: 780 }, hasTouch: true, isMobile: true } },
     { name: "mobile-390", use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } },
-    { name: "bureau", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 860 } } },
+    { name: "bureau", testIgnore: /appli\.spec\.ts/, use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 860 } } },
   ],
   webServer: {
     command: `npx tsx scripts/migrate.ts && npx next start -p ${PORT}`,

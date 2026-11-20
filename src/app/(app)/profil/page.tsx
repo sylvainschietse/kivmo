@@ -5,6 +5,7 @@ import { getPreferences, NOTIFICATION_KINDS } from "@/server/services/notificati
 import { formatDateTime } from "@/lib/format";
 import { Badge, Button, Card, ErrorFromQuery, Field, Input, Notice, OkFromQuery, PageHeader, Select } from "@/components/ui";
 import { ThemeSelect } from "@/components/theme-select";
+import { InstallApp } from "@/components/install-app";
 import { createReferralAction, deleteAccountAction, revokeConsentAction, updateNotificationPrefsAction, updateProfileAction } from "@/app/actions/profile";
 import { logoutAction } from "@/app/actions/auth";
 
@@ -39,6 +40,10 @@ export default async function Profil({ searchParams }: { searchParams: Promise<{
           <label id="epargne" className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" name="deductConversion" value="1" defaultChecked={profile?.deductConversionBeforeAllocation ?? true} className="mt-0.5 h-5 w-5" /> Déduire le coût de conversion avant d&apos;affecter des gains aux projets (recommandé)</label>
           <div><Button type="submit">Enregistrer</Button></div>
         </form>
+      </Card>
+
+      <Card title="Application sur téléphone">
+        <InstallApp />
       </Card>
 
       <Card title="Notifications">

@@ -3,11 +3,12 @@ import "./globals.css";
 import { ServiceWorker } from "@/components/sw-register";
 
 export const metadata: Metadata = {
+  formatDetection: { telephone: false },
   title: { default: "KIVMO", template: "%s · KIVMO" },
   description: "Roulez. Économisez. Réalisez vos projets. Suivi des pleins, économies mesurées, stations et projets d'épargne.",
   applicationName: "KIVMO",
   appleWebApp: { capable: true, title: "KIVMO", statusBarStyle: "default" },
-  icons: { icon: "/icon.svg", apple: "/icon-192.png" },
+  icons: { icon: "/icon.svg", apple: { url: "/apple-touch-icon.png", sizes: "180x180" } },
 };
 
 export const viewport: Viewport = {
