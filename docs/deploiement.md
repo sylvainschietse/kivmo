@@ -44,3 +44,10 @@ PostgreSQL 16, puis build et parcours navigateur Playwright.
 ## APK Android
 
 Voir `mobile/README.md` : workflow GitHub « APK Android », publication dans la release `android`.
+
+## Prix des carburants et carte
+
+- Le flux public prix-carburants est **actif par défaut en production** (`FUEL_PRICES_SOURCE=off` pour le couper).
+- Tâche planifiée quotidienne `/api/cron/import-prices` (5 h UTC) : import de toutes les stations de France via l'export JSON du jeu de données, écrit par lots.
+- Recherche « Autour de moi » : si la zone n'a pas de prix récupéré depuis 3 h, un import de la zone est lancé à la demande (une fois par heure et par maille d'environ 10 km). En cas d'échec, les derniers prix datés restent affichés.
+- Carte : Leaflet avec les tuiles OpenStreetMap (attribution affichée, usage modéré). `NEXT_PUBLIC_MAP_TILE_URL` et `NEXT_PUBLIC_MAP_ATTRIBUTION` permettent de passer à un fournisseur dédié.

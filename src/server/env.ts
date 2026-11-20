@@ -22,8 +22,11 @@ export const env = {
   get emailProvider() {
     return process.env.EMAIL_PROVIDER ?? (process.env.NODE_ENV === "production" ? "" : "console");
   },
+  /** Flux public prix-carburants : actif par défaut en production, désactivable avec FUEL_PRICES_SOURCE=off. */
   get fuelPricesEnabled() {
-    return process.env.FUEL_PRICES_SOURCE === "prix-carburants";
+    const v = process.env.FUEL_PRICES_SOURCE;
+    if (v === "off") return false;
+    return v === "prix-carburants" || process.env.NODE_ENV === "production";
   },
   get fuelPricesApiUrl() {
     return (

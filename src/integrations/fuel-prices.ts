@@ -92,26 +92,50 @@ export function parseFeedRecord(r: FeedRecord): ParsedStation | null {
   };
 }
 
-/** Écrit les stations et observations (idempotent : une observation identique n'est pas dupliquée). */
+/** Écrit les stations et observations par lots (idempotent : une observation identique n'est pas dupliquée). */
 export async function upsertParsedStations(db: DB, parsed: ParsedStation[], source = SOURCE_KEY) {
   let stations = 0;
   let observations = 0;
-  for (const p of parsed) {
-    const [st] = await db
+  // Un même identifiant ne peut apparaître qu'une fois par instruction « on conflict ».
+  const unique = [...new Map(parsed.map((p) => [p.sourceId, p])).values()];
+  for (let i = 0; i < unique.length; i += 500) {
+    const batch = unique.slice(i, i + 500);
+    const rows = await db
       .insert(schema.stations)
-      .values({ source, sourceId: p.sourceId, address: p.address, city: p.city, postalCode: p.postalCode, lat: p.lat, lng: p.lng, services: p.services, isAlwaysOpen: p.isAlwaysOpen })
-      .onConflictDoUpdate({ target: [schema.stations.source, schema.stations.sourceId], set: { address: p.address, city: p.city, postalCode: p.postalCode, lat: p.lat, lng: p.lng, services: p.services, isAlwaysOpen: p.isAlwaysOpen, updatedAt: new Date() } })
-      .returning();
-    stations++;
-    for (const fuel of new Set([...p.offered, ...p.unavailable])) {
-      const availability = p.unavailable.includes(fuel) ? "rupture_signalee" : "propose";
+      .values(batch.map((p) => ({ source, sourceId: p.sourceId, address: p.address, city: p.city, postalCode: p.postalCode, lat: p.lat, lng: p.lng, services: p.services, isAlwaysOpen: p.isAlwaysOpen })))
+      .onConflictDoUpdate({
+        target: [schema.stations.source, schema.stations.sourceId],
+        set: {
+          address: sql`excluded.address`,
+          city: sql`excluded.city`,
+          postalCode: sql`excluded.postal_code`,
+          lat: sql`excluded.lat`,
+          lng: sql`excluded.lng`,
+          services: sql`excluded.services`,
+          isAlwaysOpen: sql`excluded.is_always_open`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning({ id: schema.stations.id, sourceId: schema.stations.sourceId });
+    stations += rows.length;
+    const idOf = new Map(rows.map((r) => [r.sourceId, r.id]));
+    const fuels = batch.flatMap((p) =>
+      [...new Set([...p.offered, ...p.unavailable])].map((fuel) => ({
+        stationId: idOf.get(p.sourceId)!,
+        fuel,
+        availability: (p.unavailable.includes(fuel) ? "rupture_signalee" : "propose") as "rupture_signalee" | "propose",
+        availabilitySince: new Date(),
+      })),
+    );
+    if (fuels.length) {
       await db
         .insert(schema.stationFuels)
-        .values({ stationId: st.id, fuel, availability, availabilitySince: new Date() })
-        .onConflictDoUpdate({ target: [schema.stationFuels.stationId, schema.stationFuels.fuel], set: { availability, updatedAt: new Date() } });
+        .values(fuels)
+        .onConflictDoUpdate({ target: [schema.stationFuels.stationId, schema.stationFuels.fuel], set: { availability: sql`excluded.availability`, updatedAt: new Date() } });
     }
-    for (const pr of p.prices) {
-      const res = await db.insert(schema.priceObservations).values({ stationId: st.id, fuel: pr.fuel, price: pr.price, source, observedAt: pr.observedAt, quality: "officielle" }).onConflictDoNothing().returning({ id: schema.priceObservations.id });
+    const prices = batch.flatMap((p) => p.prices.map((pr) => ({ stationId: idOf.get(p.sourceId)!, fuel: pr.fuel, price: pr.price, source, observedAt: pr.observedAt, quality: "officielle" })));
+    for (let j = 0; j < prices.length; j += 1000) {
+      const res = await db.insert(schema.priceObservations).values(prices.slice(j, j + 1000)).onConflictDoNothing().returning({ id: schema.priceObservations.id });
       observations += res.length;
     }
   }
@@ -134,7 +158,7 @@ async function recordHealth(db: DB, ok: boolean, metrics: Record<string, unknown
  * en base si la source est indisponible.
  */
 export async function importFuelPrices(db: DB, opts: { lat?: number; lng?: number; radiusKm?: number; department?: string; maxRecords?: number; fetchImpl?: typeof fetch }) {
-  if (!env.fuelPricesEnabled && !opts.fetchImpl) throw new Error("Connecteur prix-carburants non activé (FUEL_PRICES_SOURCE).");
+  if (!env.fuelPricesEnabled && !opts.fetchImpl) throw new Error("Connecteur prix-carburants désactivé (FUEL_PRICES_SOURCE=off).");
   const f = opts.fetchImpl ?? fetch;
   const [job] = await db.insert(schema.importJobs).values({ kind: SOURCE_KEY, stats: opts }).returning();
   const where: string[] = [];
@@ -180,6 +204,55 @@ export async function importFuelPrices(db: DB, opts: { lat?: number; lng?: numbe
     await recordHealth(db, false, {}, (e as Error).message);
     return { ok: false as const, error: (e as Error).message, ...stats };
   }
+}
+
+/** Import de toutes les stations de France via l'export JSON du jeu de données (tâche planifiée). */
+export async function importAllFuelPrices(db: DB, opts: { fetchImpl?: typeof fetch } = {}) {
+  if (!env.fuelPricesEnabled && !opts.fetchImpl) throw new Error("Connecteur prix-carburants désactivé (FUEL_PRICES_SOURCE=off).");
+  const f = opts.fetchImpl ?? fetch;
+  const [job] = await db.insert(schema.importJobs).values({ kind: SOURCE_KEY, stats: { scope: "france" } }).returning();
+  try {
+    const url = env.fuelPricesApiUrl.replace(/\/records$/, "/exports/json");
+    const res = await f(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(120_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const records = (await res.json()) as FeedRecord[];
+    const parsed = records.map(parseFeedRecord).filter(Boolean) as ParsedStation[];
+    const stats = await upsertParsedStations(db, parsed);
+    await db.update(schema.importJobs).set({ status: "termine", finishedAt: new Date(), stats: { ...stats, total: records.length, scope: "france" } }).where(eq(schema.importJobs.id, job.id));
+    await recordHealth(db, true, { ...stats, total: records.length, scope: "france", lastImportJob: job.id });
+    return { ok: true as const, ...stats, total: records.length };
+  } catch (e) {
+    await db.update(schema.importJobs).set({ status: "erreur", finishedAt: new Date(), error: (e as Error).message }).where(eq(schema.importJobs.id, job.id));
+    await recordHealth(db, false, {}, (e as Error).message);
+    return { ok: false as const, error: (e as Error).message };
+  }
+}
+
+/**
+ * Rafraîchit les prix autour d'un point si la zone n'a pas de prix récent (moins de 3 h).
+ * Une même zone (maille d'environ 10 km) n'est interrogée qu'une fois par heure.
+ * En cas d'échec de la source, les derniers prix datés restent affichés.
+ */
+export async function refreshAreaIfStale(db: DB, lat: number, lng: number, radiusKm: number) {
+  if (!env.fuelPricesEnabled || !Number.isFinite(lat) || !Number.isFinite(lng)) return { refreshed: false as const };
+  const radius = Math.min(Math.max(radiusKm, 1), 30);
+  const dLat = radius / 111;
+  const dLng = radius / (111 * Math.cos((lat * Math.PI) / 180));
+  const [fresh] = await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from price_observations po join stations s on s.id = po.station_id
+    where s.is_demo = false and s.lat between ${lat - dLat} and ${lat + dLat} and s.lng between ${lng - dLng} and ${lng + dLng}
+      and po.fetched_at > now() - interval '3 hours'`);
+  if (Number(fresh?.n ?? 0) > 0) return { refreshed: false as const };
+  const cell = `${Math.round(lat * 10)}:${Math.round(lng * 10)}`;
+  const [slot] = await db.execute<{ count: number }>(sql`
+    insert into rate_limits (key, window_start, count) values (${"prix-zone:" + cell}, now(), 1)
+    on conflict (key) do update set
+      count = case when rate_limits.window_start < now() - interval '1 hour' then 1 else rate_limits.count + 1 end,
+      window_start = case when rate_limits.window_start < now() - interval '1 hour' then now() else rate_limits.window_start end
+    returning count`);
+  if (Number(slot?.count ?? 0) > 1) return { refreshed: false as const };
+  const r = await importFuelPrices(db, { lat, lng, radiusKm: Math.max(radius, 10), maxRecords: 500 });
+  return { refreshed: r.ok };
 }
 
 export async function lastImport(db: DB) {
