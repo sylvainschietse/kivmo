@@ -220,6 +220,15 @@ export async function vehiclesByIds(db: DBOrTx, ids: string[]) {
 
 const PHOTO_DATA_URL = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
 
+/** Décode une photo envoyée par le formulaire (data URL, déjà réduite côté téléphone). */
+export function decodePhotoDataUrl(dataUrl: string, maxBytes: number) {
+  const m = PHOTO_DATA_URL.exec(dataUrl);
+  if (!m) throw validation("Photo illisible.");
+  const data = Buffer.from(m[2], "base64");
+  if (data.length > maxBytes) throw validation("Photo trop lourde.");
+  return { mimeType: m[1], data };
+}
+
 /** Enregistre la photo (déjà réduite côté téléphone) et l'associe au véhicule. */
 export async function setVehiclePhoto(db: DB, ctx: Ctx, vehicleId: string, dataUrl: string) {
   const { vehicle } = await requireVehicle(db, ctx, vehicleId, "write");

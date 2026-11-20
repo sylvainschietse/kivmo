@@ -30,7 +30,7 @@ export async function photoToDataUrl(file: File, maxSide: number, quality = 0.8)
 export type ScanState = { status: "idle" | "reading" | "done" | "error"; message?: string };
 
 /** Envoie une ou plusieurs photos au lecteur et renvoie les valeurs proposées. */
-export async function scanPhotos<T>(target: "fillup" | "vehicle", photos: Record<string, File>): Promise<{ ok: true; result: T } | { ok: false; message: string }> {
+export async function scanPhotos<T>(target: "fillup" | "vehicle" | "maintenance", photos: Record<string, File>): Promise<{ ok: true; result: T } | { ok: false; message: string }> {
   const fd = new FormData();
   fd.set("target", target);
   for (const [kind, file] of Object.entries(photos)) fd.set(kind, await shrinkPhoto(file), `${kind}.jpg`);
