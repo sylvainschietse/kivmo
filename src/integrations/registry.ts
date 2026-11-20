@@ -43,6 +43,14 @@ export function integrations(): IntegrationInfo[] {
       envVars: ["FUEL_PRICES_SOURCE", "FUEL_PRICES_API_URL", "CRON_SECRET"],
     },
     {
+      key: "station_names",
+      label: "Noms et enseignes des stations (OpenStreetMap)",
+      status: "connecte",
+      detail: "Import hebdomadaire depuis OpenStreetMap (ODbL), rapproché par identifiant officiel ou par position.",
+      fallback: "Adresse de la station quand le nom est inconnu.",
+      envVars: ["OVERPASS_URL", "CRON_SECRET"],
+    },
+    {
       key: "map_tiles",
       label: "Fond de carte",
       status: "connecte",

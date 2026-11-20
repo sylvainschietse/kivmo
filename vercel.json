@@ -3,6 +3,7 @@
   "regions": ["cdg1"],
   "crons": [
     { "path": "/api/cron/import-prices", "schedule": "0 5 * * *" },
+    { "path": "/api/cron/import-names", "schedule": "0 4 * * 1" },
     { "path": "/api/cron/purge-demo", "schedule": "0 3 * * *" },
     { "path": "/api/cron/reconcile", "schedule": "30 3 * * *" }
   ]

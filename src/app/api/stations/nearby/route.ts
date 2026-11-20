@@ -1,4 +1,5 @@
 import { api } from "@/server/api";
+import { stationTitle } from "@/integrations/station-names";
 import { nearbyStations } from "@/server/services/stations";
 import type { FuelCode } from "@/domain/types";
 
@@ -17,7 +18,7 @@ export const GET = api(async ({ req, db, ctx }) => {
   });
   return views.map((v) => ({
     id: v.station.id,
-    name: v.station.name ?? v.station.address,
+    name: stationTitle(v.station),
     address: [v.station.address, v.station.postalCode, v.station.city].filter(Boolean).join(" "),
     lat: v.station.lat,
     lng: v.station.lng,

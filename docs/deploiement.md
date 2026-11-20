@@ -51,3 +51,7 @@ Voir `mobile/README.md` : workflow GitHub « APK Android », publication dans la
 - Tâche planifiée quotidienne `/api/cron/import-prices` (5 h UTC) : import de toutes les stations de France via l'export JSON du jeu de données, écrit par lots.
 - Recherche « Autour de moi » : si la zone n'a pas de prix récupéré depuis 3 h, un import de la zone est lancé à la demande (une fois par heure et par maille d'environ 10 km). En cas d'échec, les derniers prix datés restent affichés.
 - Carte : Leaflet avec les tuiles OpenStreetMap (attribution affichée, usage modéré). `NEXT_PUBLIC_MAP_TILE_URL` et `NEXT_PUBLIC_MAP_ATTRIBUTION` permettent de passer à un fournisseur dédié.
+
+## Noms et enseignes des stations
+
+Le flux officiel des prix ne donne ni nom ni enseigne. La tâche `/api/cron/import-names` (chaque lundi à 4 h) les récupère dans OpenStreetMap via Overpass (`OVERPASS_URL`, par défaut `https://overpass-api.de/api/interpreter`) et les rapproche par l'identifiant `ref:FR:prix-carburants`, sinon par la position (moins de 150 m). Données sous licence ODbL : l'attribution est affichée sur la fiche station.

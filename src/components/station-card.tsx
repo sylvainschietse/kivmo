@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { stationTitle } from "@/integrations/station-names";
 import type { StationView } from "@/server/services/stations";
 import { AVAILABILITY_LABELS } from "@/server/services/stations";
 import { formatAge, formatUnitPrice } from "@/lib/format";
@@ -11,7 +12,8 @@ export function StationCard({ v, fuel, rank }: { v: StationView; fuel?: FuelCode
     <Link href={`/stations/${v.station.id}`} className="block rounded-2xl border border-line bg-surface p-3 hover:border-green">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-semibold">{rank ? <span className="mr-1 text-muted">{rank}.</span> : null}{v.station.name ?? v.station.brand ?? "Station"} {v.isFavorite && <span aria-label="Favori">★</span>}</p>
+          <p className="font-semibold">{rank ? <span className="mr-1 text-muted">{rank}.</span> : null}{stationTitle(v.station)} {v.isFavorite && <span aria-label="Favori">★</span>}</p>
+          {v.station.brand && v.station.name && v.station.brand !== v.station.name && <p className="text-xs font-semibold text-muted">{v.station.brand}</p>}
           <p className="truncate text-sm text-muted">{[v.station.address, v.station.postalCode, v.station.city].filter(Boolean).join(" ")}</p>
         </div>
         <div className="shrink-0 text-right text-sm">

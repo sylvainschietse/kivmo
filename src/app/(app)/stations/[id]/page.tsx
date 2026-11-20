@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { stationTitle } from "@/integrations/station-names";
 import { getDb } from "@/db/client";
 import { requireSession } from "@/server/session";
 import { navigationUrl, stationDetail, AVAILABILITY_LABELS } from "@/server/services/stations";
@@ -24,9 +25,11 @@ export default async function StationPage({ params, searchParams }: { params: Pr
   const st = s.station;
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <PageHeader title={st.name ?? st.brand ?? "Station"} subtitle={[st.address, st.postalCode, st.city].filter(Boolean).join(" ")} />
+      <PageHeader title={stationTitle(st)} subtitle={[st.address, st.postalCode, st.city].filter(Boolean).join(" ")} />
       <OkFromQuery ok={q.ok} />
       <ErrorFromQuery error={q.erreur} />
+      {st.brand && st.brand !== st.name && <p className="text-sm font-semibold text-muted">Enseigne : {st.brand}</p>}
+      {!st.isDemo && (st.name || st.brand) && <p className="text-xs text-muted">Nom et enseigne : © les contributeurs d&apos;OpenStreetMap</p>}
       {st.isDemo && <Badge tone="lime">Station de démonstration (données fictives)</Badge>}
       <div className="flex flex-wrap gap-2">
         <LinkButton href={`/pleins/nouveau?station=${st.id}`} variant="lime">Ajouter un plein ici</LinkButton>

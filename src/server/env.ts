@@ -28,6 +28,10 @@ export const env = {
     if (v === "off") return false;
     return v === "prix-carburants" || process.env.NODE_ENV === "production";
   },
+  /** Serveur Overpass (OpenStreetMap) pour les noms et enseignes des stations. */
+  get overpassUrl() {
+    return process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interpreter";
+  },
   get fuelPricesApiUrl() {
     return (
       process.env.FUEL_PRICES_API_URL ??
