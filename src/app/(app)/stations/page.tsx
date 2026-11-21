@@ -3,7 +3,8 @@ import { stationTitle } from "@/integrations/station-names";
 import { StationsMap, type MapPoint } from "@/components/stations-map";
 import { getDb } from "@/db/client";
 import { requireSession } from "@/server/session";
-import { favoriteStations, nearbyStations, searchStationsByText } from "@/server/services/stations";
+import { favoriteStations, nearbyStations, searchStationsByText, sortStations, STATION_SORTS, type StationSort } from "@/server/services/stations";
+import Link from "next/link";
 import { activeSponsoredOffers } from "@/server/services/partners";
 import { integrations } from "@/integrations/registry";
 import { lastImport, refreshAreaIfStale } from "@/integrations/fuel-prices";
@@ -15,7 +16,7 @@ import { StationCard } from "@/components/station-card";
 
 export const metadata = { title: "Stations" };
 
-type Q = { lat?: string; lng?: string; precision?: string; q?: string; fuel?: string; rayon?: string; age?: string; rupture?: string; ouvert?: string; marque?: string; service?: string; ok?: string; erreur?: string };
+type Q = { lat?: string; lng?: string; precision?: string; q?: string; fuel?: string; rayon?: string; age?: string; rupture?: string; ouvert?: string; marque?: string; service?: string; tri?: string; ok?: string; erreur?: string };
 
 export default async function Stations({ searchParams }: { searchParams: Promise<Q> }) {
   const q = await searchParams;
@@ -25,13 +26,21 @@ export default async function Stations({ searchParams }: { searchParams: Promise
   const lat = q.lat ? Number(q.lat) : NaN, lng = q.lng ? Number(q.lng) : NaN;
   const hasPos = Number.isFinite(lat) && Number.isFinite(lng);
   const includeDemo = ctx.isDemo;
+  const sort: StationSort = q.tri && q.tri in STATION_SORTS ? (q.tri as StationSort) : fuel ? "prix" : "distance";
   // Prix officiels de la zone rafraîchis à la demande s'ils datent de plus de 3 h (sans bloquer en cas d'échec).
   if (hasPos && !includeDemo) await refreshAreaIfStale(db, lat, lng, Number(q.rayon ?? 10) || 10).catch(() => undefined);
   const results = hasPos
-    ? await nearbyStations(db, ctx, { lat, lng, radiusKm: Number(q.rayon ?? 10) || 10, fuel, maxPriceAgeHours: q.age ? Number(q.age) : null, excludeRupture: q.rupture === "1", openNow: q.ouvert === "1", brand: q.marque || null, service: q.service || null, includeDemo, limit: 30 })
+    ? await nearbyStations(db, ctx, { lat, lng, radiusKm: Number(q.rayon ?? 10) || 10, fuel, maxPriceAgeHours: q.age ? Number(q.age) : null, excludeRupture: q.rupture === "1", openNow: q.ouvert === "1", brand: q.marque || null, service: q.service || null, includeDemo, limit: 30, sort })
     : q.q
-      ? await searchStationsByText(db, ctx, q.q, includeDemo)
+      ? sortStations(await searchStationsByText(db, ctx, q.q, includeDemo), sort === "distance" ? "nom" : sort, fuel)
       : null;
+  // Liens de tri : mêmes paramètres, seul « tri » change.
+  const sortHref = (t: StationSort) => {
+    const p = new URLSearchParams(Object.entries(q).filter(([k, v]) => v && !["tri", "ok", "erreur"].includes(k)) as [string, string][]);
+    p.set("tri", t);
+    return `/stations?${p.toString()}`;
+  };
+  const sortChoices = (Object.keys(STATION_SORTS) as StationSort[]).filter((t) => (t !== "distance" || hasPos) && (t !== "prix" || fuel));
   const favorites = results ? [] : await favoriteStations(db, ctx);
   const offers = await activeSponsoredOffers(db, includeDemo);
   const map = integrations().find((i) => i.key === "map_tiles");
@@ -60,7 +69,7 @@ export default async function Stations({ searchParams }: { searchParams: Promise
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Stations" subtitle="Prix officiels datés, classés par prix puis distance. Aucun classement payant." />
+      <PageHeader title="Stations" subtitle="Prix officiels datés, à trier par prix, distance, mise à jour ou nom. Aucun classement payant." />
       <OkFromQuery ok={q.ok} />
       <ErrorFromQuery error={q.erreur} />
       <Card>
@@ -77,6 +86,7 @@ export default async function Stations({ searchParams }: { searchParams: Promise
           <summary className="tap cursor-pointer text-sm font-semibold text-green">Filtres</summary>
           <form className="mt-2 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {hasPos && <><input type="hidden" name="lat" value={q.lat} /><input type="hidden" name="lng" value={q.lng} /></>}
+            {q.tri && <input type="hidden" name="tri" value={q.tri} />}
             {q.q && <input type="hidden" name="q" value={q.q} />}
             <Field label="Carburant" htmlFor="fuel"><Select id="fuel" name="fuel" defaultValue={fuel ?? ""}><option value="">Tous</option>{FUELS.filter((f) => f !== "ELEC_KWH").map((f) => <option key={f} value={f}>{FUEL_LABELS[f]}</option>)}</Select></Field>
             <Field label="Rayon" htmlFor="rayon"><Select id="rayon" name="rayon" defaultValue={q.rayon ?? "10"}>{[2, 5, 10, 20, 50].map((r) => <option key={r} value={r}>{r} km</option>)}</Select></Field>
@@ -102,7 +112,14 @@ export default async function Stations({ searchParams }: { searchParams: Promise
             <StationsMap points={points} center={hasPos ? { lat, lng } : null} fuelLabel={fuel ? FUEL_LABELS[fuel] : null} />
             {!fuel && <p className="mt-2 text-xs text-muted">Choisissez un carburant dans les filtres pour afficher son prix sur la carte.</p>}
             <h2 className="mb-2 mt-3 text-sm font-semibold text-muted">{results.length} station(s){fuel ? ` proposant ${FUEL_LABELS[fuel]}` : ""}</h2>
-            <ul className="space-y-2">{results.map((v, i) => <li key={v.station.id}><StationCard v={v} fuel={fuel} rank={fuel ? i + 1 : undefined} /></li>)}</ul>
+            <nav aria-label="Trier les stations" className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted">Trier par</span>
+              {sortChoices.map((t) => (
+                <Link key={t} href={sortHref(t)} aria-current={t === sort ? "true" : undefined} className={`tap inline-flex items-center rounded-full px-3 font-semibold ${t === sort ? "bg-green text-green-ink" : "bg-surface-2"}`}>{STATION_SORTS[t]}</Link>
+              ))}
+              {!fuel && <span className="text-xs text-muted">Choisissez un carburant pour trier par prix.</span>}
+            </nav>
+            <ul className="space-y-2">{results.map((v, i) => <li key={v.station.id}><StationCard v={v} fuel={fuel} rank={fuel && sort === "prix" ? i + 1 : undefined} /></li>)}</ul>
           </section>
         ) : (
           <EmptyState title="Aucune station trouvée">Élargissez le rayon ou retirez des filtres. Si aucun import de prix n&apos;a eu lieu, la base de stations est vide.</EmptyState>

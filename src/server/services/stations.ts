@@ -115,6 +115,35 @@ export interface NearbyQuery {
   openNow?: boolean;
   includeDemo?: boolean;
   limit?: number;
+  sort?: StationSort;
+}
+
+export const STATION_SORTS = { prix: "Prix", distance: "Distance", recent: "Mise à jour", nom: "Nom" } as const;
+export type StationSort = keyof typeof STATION_SORTS;
+
+type View = Awaited<ReturnType<typeof buildViews>>[number];
+
+/**
+ * Tri des stations. « prix » : prix frais croissant (prix anciens ou inconnus à la fin) puis distance ;
+ * « recent » : prix le plus récemment mis à jour d'abord. Sans carburant choisi, « prix » trie par distance.
+ */
+export function sortStations<T extends View>(views: T[], sort: StationSort, fuel: FuelCode | null): T[] {
+  const dist = (v: T) => v.crowFliesKm ?? Infinity;
+  const fuelOf = (v: T) => (fuel ? v.fuels.find((f) => f.fuel === fuel) : undefined);
+  const price = (v: T) => { const f = fuelOf(v); return f?.price && !f.stale ? f.price.toNumber() : Infinity; };
+  const updated = (v: T) => {
+    const dates = (fuel ? [fuelOf(v)] : v.fuels).map((f) => f?.observedAt?.getTime() ?? 0);
+    return Math.max(0, ...dates);
+  };
+  const name = (v: T) => (v.station.name ?? v.station.brand ?? v.station.address ?? "").toLocaleLowerCase("fr");
+  const cmp: Record<StationSort, (a: T, b: T) => number> = {
+    prix: (a, b) => (fuel ? price(a) - price(b) || 0 : 0) || dist(a) - dist(b),
+    distance: (a, b) => dist(a) - dist(b),
+    recent: (a, b) => updated(b) - updated(a) || dist(a) - dist(b),
+    nom: (a, b) => name(a).localeCompare(name(b), "fr") || dist(a) - dist(b),
+  };
+  // Infinity - Infinity donne NaN : on le ramène à 0 pour garder un tri stable.
+  return [...views].sort((a, b) => cmp[sort](a, b) || 0);
 }
 
 /**
@@ -142,14 +171,8 @@ export async function nearbyStations(db: DBOrTx, ctx: Ctx | null, q: NearbyQuery
       const f = v.fuels.find((x) => x.fuel === q.fuel);
       return f?.observedAt && Date.now() - f.observedAt.getTime() <= q.maxPriceAgeHours! * 3_600_000;
     });
-    views.sort((a, b) => {
-      const fa = a.fuels.find((f) => f.fuel === q.fuel)!;
-      const fb = b.fuels.find((f) => f.fuel === q.fuel)!;
-      const pa = fa.price && !fa.stale ? fa.price.toNumber() : Infinity;
-      const pb = fb.price && !fb.stale ? fb.price.toNumber() : Infinity;
-      return pa - pb || (a.crowFliesKm ?? 0) - (b.crowFliesKm ?? 0);
-    });
-  } else views.sort((a, b) => (a.crowFliesKm ?? 0) - (b.crowFliesKm ?? 0));
+  }
+  views = sortStations(views, q.sort ?? (q.fuel ? "prix" : "distance"), q.fuel ?? null);
   return views.slice(0, q.limit ?? 50);
 }
 

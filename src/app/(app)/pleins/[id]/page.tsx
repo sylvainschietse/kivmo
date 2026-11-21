@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackButton } from "@/components/back-button";
 import { getDb } from "@/db/client";
 import { requireSession } from "@/server/session";
 import { getFillup } from "@/server/services/fillups";
@@ -49,6 +50,7 @@ export default async function PleinDetail({ params, searchParams }: { params: Pr
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      <BackButton fallback="/accueil" />
       <PageHeader title={q.nouveau ? "Plein enregistré" : "Détail du plein"} subtitle={`${vehicle.name} · ${formatDateTime(f.occurredAt)}`} action={<LinkButton href="/pleins/nouveau" variant="lime">Nouveau plein</LinkButton>} />
       <OkFromQuery ok={q.ok} />
       <ErrorFromQuery error={q.erreur} />

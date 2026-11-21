@@ -1,4 +1,5 @@
 import { desc, eq } from "drizzle-orm";
+import { BackButton } from "@/components/back-button";
 import { getDb, schema } from "@/db/client";
 import { requireSession } from "@/server/session";
 import { requireVehicle } from "@/server/authz";
@@ -47,6 +48,7 @@ export default async function VehiculeDetail({ params, searchParams }: { params:
         // eslint-disable-next-line @next/next/no-img-element
         <img src={photoUrl} alt={`Photo de ${vehicle.name}`} className="h-40 w-full rounded-2xl object-cover sm:h-56" />
       )}
+      <BackButton fallback="/garage" />
       <PageHeader title={vehicle.name} subtitle={[vehicle.make, vehicle.model, vehicle.year, vehicle.engine].filter(Boolean).join(" · ") || "Véhicule"} />
       <OkFromQuery ok={q.ok} />
       <ErrorFromQuery error={q.erreur} />

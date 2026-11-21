@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackButton } from "@/components/back-button";
 import { stationTitle } from "@/integrations/station-names";
 import { getDb } from "@/db/client";
 import { requireSession } from "@/server/session";
@@ -25,6 +26,7 @@ export default async function StationPage({ params, searchParams }: { params: Pr
   const st = s.station;
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      <BackButton fallback="/stations" />
       <PageHeader title={stationTitle(st)} subtitle={[st.address, st.postalCode, st.city].filter(Boolean).join(" ")} />
       <OkFromQuery ok={q.ok} />
       <ErrorFromQuery error={q.erreur} />

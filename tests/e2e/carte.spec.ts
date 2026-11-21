@@ -34,4 +34,23 @@ test.describe("Carte des stations", () => {
     await expect(page.getByTestId("carte-stations")).toBeVisible();
     await expect(page.getByText("Choisissez un carburant dans les filtres")).toBeVisible();
   });
+
+  test("tri par distance puis retour depuis la fiche vers la liste", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Découvrir en mode démo" }).click();
+    await page.waitForURL(/\/accueil/);
+    await page.goto("/stations?lat=48.853&lng=2.38&rayon=10&fuel=E85");
+    const tri = page.getByRole("navigation", { name: "Trier les stations" });
+    await expect(tri.getByRole("link", { name: "Prix" })).toHaveAttribute("aria-current", "true");
+    await tri.getByRole("link", { name: "Distance" }).click();
+    await expect(page).toHaveURL(/tri=distance/);
+    await expect(tri.getByRole("link", { name: "Distance" })).toHaveAttribute("aria-current", "true");
+    const kms = (await page.locator("section[aria-label='Résultats'] li p.num").allTextContents()).map((t) => Number(t.replace(/[^0-9,]/g, "").replace(",", ".")));
+    expect(kms).toEqual([...kms].sort((a, b) => a - b));
+
+    await page.locator("section[aria-label='Résultats'] ul a").first().click();
+    await expect(page).toHaveURL(/\/stations\/[0-9a-f-]+$/);
+    await page.getByRole("button", { name: "Retour" }).click();
+    await expect(page).toHaveURL(/\/stations\?.*tri=distance/);
+  });
 });
