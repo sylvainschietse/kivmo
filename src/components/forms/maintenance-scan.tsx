@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { PhotoButton, photoToDataUrl, scanPhotos, type ScanState } from "@/components/photo-scan";
+import { kmDigits } from "@/lib/format";
 
 interface MaintenanceScanResult {
   kind: "entretien" | "controle_technique" | "pneus" | "reparation" | null;
@@ -40,14 +41,14 @@ export function MaintenanceScan({ photoScan }: { photoScan: boolean }) {
       el.classList.add("ring-2", "ring-green");
       if (label) done.push(label);
     };
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleDateString("sv-SE"); // jour local du téléphone, AAAA-MM-JJ
     set("mode", "evenement");
     set("kind", x.kind, x.kind === "controle_technique" ? "contrôle technique" : x.kind ?? undefined);
     if (x.date && ISO_DATE.test(x.date) && x.date <= today) set("occurredOn", x.date, "date");
     set("cost", x.totalTtc?.replace(".", ",") ?? null, "montant");
-    set("odometerKm", x.odometerKm?.replace(/\D/g, "") || null, "kilométrage");
+    set("odometerKm", kmDigits(x.odometerKm) || null, "kilométrage");
     if (x.nextDueOn && ISO_DATE.test(x.nextDueOn) && x.nextDueOn > today) set("dueOn", x.nextDueOn, "prochaine échéance");
-    set("dueOdometerKm", x.nextDueKm?.replace(/\D/g, "") || null, x.nextDueOn ? undefined : "prochaine échéance");
+    set("dueOdometerKm", kmDigits(x.nextDueKm) || null, x.nextDueOn ? undefined : "prochaine échéance");
     const note = [x.garage, x.summary].filter(Boolean).join(" · ");
     const noteEl = form.elements.namedItem("note") as HTMLTextAreaElement | null;
     if (note && noteEl && !noteEl.value) set("note", note, "garage et travaux");

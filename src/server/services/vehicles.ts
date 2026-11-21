@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, max } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, max, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { schema, type DB, type DBOrTx } from "@/db/client";
 import { D } from "@/lib/decimal";
@@ -35,7 +35,7 @@ export async function listVehicles(db: DBOrTx, ctx: Ctx, opts: { includeArchived
     const rows = await db.select().from(schema.vehicles).where(eq(schema.vehicles.organizationId, opts.organizationId)).orderBy(asc(schema.vehicles.name));
     let visible = rows;
     if (m.role === "driver") {
-      const assigned = await db.select({ v: schema.vehicleAssignments.vehicleId }).from(schema.vehicleAssignments).where(eq(schema.vehicleAssignments.userId, ctx.userId));
+      const assigned = await db.select({ v: schema.vehicleAssignments.vehicleId }).from(schema.vehicleAssignments).where(and(eq(schema.vehicleAssignments.userId, ctx.userId), or(isNull(schema.vehicleAssignments.endsAt), sql`${schema.vehicleAssignments.endsAt} > now()`)));
       const ids = new Set(assigned.map((a) => a.v));
       visible = rows.filter((r) => ids.has(r.id));
     } else if (m.role === "manager" && m.teamId) visible = rows.filter((r) => r.teamId === m.teamId);

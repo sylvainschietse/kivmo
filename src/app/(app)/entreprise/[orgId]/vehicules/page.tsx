@@ -7,6 +7,7 @@ import { listVehicles } from "@/server/services/vehicles";
 import { formatDate, formatKm } from "@/lib/format";
 import { Badge, Button, Card, EmptyState, ErrorFromQuery, Field, Input, LinkButton, OkFromQuery, Select } from "@/components/ui";
 import { assignVehicleAction, endAssignmentAction } from "@/app/actions/organizations";
+import { dayInZone } from "@/lib/dates";
 
 export default async function OrgVehicles({ params, searchParams }: { params: Promise<{ orgId: string }>; searchParams: Promise<{ ok?: string; erreur?: string }> }) {
   const { orgId } = await params;
@@ -19,7 +20,7 @@ export default async function OrgVehicles({ params, searchParams }: { params: Pr
   const members = canWrite ? await listMembers(db, ctx, orgId) : [];
   const assignments = vehicles.length ? await db.select().from(schema.vehicleAssignments).where(and(inArray(schema.vehicleAssignments.vehicleId, vehicles.map((v) => v.id)), isNull(schema.vehicleAssignments.endsAt))) : [];
   const users = assignments.length ? await db.select({ id: schema.users.id, email: schema.users.email, name: schema.users.displayName }).from(schema.users).where(inArray(schema.users.id, assignments.map((a) => a.userId))) : [];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dayInZone(new Date());
   return (
     <div className="space-y-4">
       <OkFromQuery ok={q.ok} />

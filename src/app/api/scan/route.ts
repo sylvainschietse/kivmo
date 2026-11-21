@@ -1,13 +1,15 @@
 import { api } from "@/server/api";
 import { AppError } from "@/server/errors";
 import { checkRateLimit } from "@/server/rate-limit";
+import { env } from "@/server/env";
 import { sniffMime } from "@/server/services/attachments";
 import { ocrAvailable, OCR_UNAVAILABLE_MESSAGE, readFillupPhotos, readMaintenancePhotos, readVehiclePhotos, type ScanImage } from "@/integrations/ocr";
 
 export const maxDuration = 60;
 
 const KINDS = { fillup: ["compteur", "pompe", "ticket"], vehicle: ["carte_grise", "vehicule"], maintenance: ["facture"] } as const;
-const MAX_BYTES = 4 * 1024 * 1024;
+// Vercel refuse les envois de plus de 4,5 Mo : les photos sont réduites sur le téléphone (environ 0,3 Mo chacune).
+const MAX_BYTES = 1.4 * 1024 * 1024;
 
 /**
  * Lecture de photos pour pré-remplir un formulaire (plein, véhicule ou entretien).
@@ -15,7 +17,15 @@ const MAX_BYTES = 4 * 1024 * 1024;
  */
 export const POST = api(async ({ req, db, ctx }) => {
   if (!ocrAvailable()) throw new AppError("NOT_CONNECTED", OCR_UNAVAILABLE_MESSAGE);
-  await checkRateLimit(db, `scan:${ctx.userId}`, 40, 3600);
+  // Lecture payante : réservée aux vrais comptes, avec des plafonds par personne et global.
+  if (ctx.isDemo) throw new AppError("FORBIDDEN", "La lecture des photos est réservée aux comptes. Créez un compte gratuit pour l'essayer, ou complétez à la main.");
+  await checkRateLimit(db, `scan:${ctx.userId}`, 20, 3600);
+  await checkRateLimit(db, `scan-jour:${ctx.userId}`, 60, 86400);
+  try {
+    await checkRateLimit(db, "scan-global", env.ocrDailyLimit, 86400);
+  } catch {
+    throw new AppError("RATE_LIMITED", "La lecture des photos est momentanément indisponible. Complétez à la main, elle reviendra demain.");
+  }
   const form = await req.formData();
   const target = String(form.get("target") ?? "");
   if (target !== "fillup" && target !== "vehicle" && target !== "maintenance") throw new AppError("VALIDATION", "Cible de lecture invalide.");

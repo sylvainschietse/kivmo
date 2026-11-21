@@ -33,7 +33,8 @@ export async function updateFillupAction(fd: FormData) {
       { closedPeriodCorrection: closed },
     );
     if (r.status === "amount_mismatch") return `/pleins/${id}?erreur=${encodeURIComponent(r.message)}`;
-    return `/pleins/${id}?ok=${encodeURIComponent("Correction enregistrée : intervalles et totaux recalculés. Les virements déjà exécutés ne sont pas modifiés.")}`;
+    const warn = r.warnings.length ? ` À vérifier : ${r.warnings.join(" ")}` : "";
+    return `/pleins/${id}?ok=${encodeURIComponent(`Correction enregistrée : intervalles et totaux recalculés. Les virements déjà exécutés ne sont pas modifiés.${warn}`)}`;
   });
 }
 

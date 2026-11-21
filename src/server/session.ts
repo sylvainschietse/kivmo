@@ -5,6 +5,7 @@ import { cache } from "react";
 import { getDb } from "@/db/client";
 import { resolveSession, SESSION_COOKIE, SESSION_DAYS } from "./auth";
 import { env } from "./env";
+import { checkRateLimit } from "./rate-limit";
 
 export const getSession = cache(async () => {
   const jar = await cookies();
@@ -33,4 +34,17 @@ export async function clearSessionCookie() {
 
 export async function userAgent() {
   return (await headers()).get("user-agent");
+}
+
+/** Adresse IP du visiteur (Vercel renseigne x-forwarded-for), pour les limites anti-abus. */
+export async function clientIp() {
+  const h = await headers();
+  return (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "").trim().slice(0, 64);
+}
+
+/** Limite par adresse IP (désactivable pour les tests automatiques, qui viennent tous de la même adresse). */
+export async function checkIpRateLimit(prefix: string, max: number, windowSeconds: number) {
+  if (process.env.IP_RATE_LIMIT === "off") return;
+  const ip = await clientIp();
+  if (ip) await checkRateLimit(getDb(), `${prefix}:${ip}`, max, windowSeconds);
 }

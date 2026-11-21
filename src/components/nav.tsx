@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cx } from "./ui";
-import { IconBuilding, IconCalc, IconCar, IconChart, IconHandshake, IconHistory, IconHome, IconPlus, IconPump, IconRoute, IconShield, IconTarget, IconUser, IconBell } from "./icons";
+import { IconBuilding, IconCalc, IconCar, IconChart, IconHandshake, IconHistory, IconHome, IconPlus, IconPump, IconRoute, IconShield, IconTarget, IconUser, IconBell, IconMenu } from "./icons";
 
 const mobile = [
   { href: "/accueil", label: "Accueil", Icon: IconHome },
@@ -92,5 +92,25 @@ export function Sidebar({ orgs, isAdmin, partnerOrgs, unread }: { orgs: { id: st
       )}
       {isAdmin && <ul>{item("/admin", "Administration KIVMO", IconShield)}</ul>}
     </aside>
+  );
+}
+
+/** En-tête des petits écrans (téléphone, appli Android) : notifications et menu complet. */
+export function MobileHeader({ unread }: { unread: number }) {
+  return (
+    <header className="flex items-center justify-between border-b border-line bg-surface px-4 py-2 lg:hidden">
+      <Link href="/accueil" className="flex items-center gap-2 text-lg font-black tracking-tight">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-lime text-lime-ink">K</span> KIVMO
+      </Link>
+      <div className="flex items-center gap-1">
+        <Link href="/notifications" className="tap relative flex h-11 w-11 items-center justify-center rounded-xl text-ink" aria-label={unread ? `Notifications, ${unread} non lues` : "Notifications"}>
+          <IconBell />
+          {unread ? <span className="absolute right-1.5 top-1.5 min-w-5 rounded-full bg-loss px-1 text-center text-[11px] font-bold text-white" aria-hidden="true">{unread}</span> : null}
+        </Link>
+        <Link href="/menu" className="tap flex h-11 w-11 items-center justify-center rounded-xl text-ink" aria-label="Menu : profil, déconnexion et autres rubriques">
+          <IconMenu />
+        </Link>
+      </div>
+    </header>
   );
 }

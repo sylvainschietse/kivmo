@@ -158,7 +158,17 @@ export async function nearbyStations(db: DBOrTx, ctx: Ctx | null, q: NearbyQuery
   const rows = await db
     .select()
     .from(schema.stations)
-    .where(and(between(schema.stations.lat, q.lat - dLat, q.lat + dLat), between(schema.stations.lng, q.lng - dLng, q.lng + dLng), q.includeDemo ? undefined : eq(schema.stations.isDemo, false)))
+    .where(
+      and(
+        between(schema.stations.lat, q.lat - dLat, q.lat + dLat),
+        between(schema.stations.lng, q.lng - dLng, q.lng + dLng),
+        q.includeDemo ? undefined : eq(schema.stations.isDemo, false),
+        // Carburant filtré avant la limite : en ville dense, aucune station utile n'est écartée.
+        q.fuel ? sql`exists (select 1 from station_fuels sf where sf.station_id = ${schema.stations.id} and sf.fuel = ${q.fuel})` : undefined,
+      ),
+    )
+    // Les plus proches d'abord (distance approchée), pour que la limite écarte les plus lointaines.
+    .orderBy(sql`power(${schema.stations.lat} - ${q.lat}, 2) + power((${schema.stations.lng} - ${q.lng}) * ${Math.cos((q.lat * Math.PI) / 180)}, 2)`)
     .limit(500);
   let views = (await buildViews(db, rows, ctx, { lat: q.lat, lng: q.lng })).filter((v) => (v.crowFliesKm ?? 0) <= radius);
   if (q.brand) views = views.filter((v) => v.station.brand?.toLowerCase().includes(q.brand!.toLowerCase()));
@@ -183,6 +193,7 @@ export async function searchStationsByText(db: DBOrTx, ctx: Ctx | null, text: st
     .select()
     .from(schema.stations)
     .where(and(sql`(${schema.stations.city} ilike ${"%" + t + "%"} or ${schema.stations.postalCode} like ${t + "%"} or ${schema.stations.address} ilike ${"%" + t + "%"} or ${schema.stations.name} ilike ${"%" + t + "%"})`, includeDemo ? undefined : eq(schema.stations.isDemo, false)))
+    .orderBy(schema.stations.city, schema.stations.name, schema.stations.address)
     .limit(30);
   return buildViews(db, rows, ctx, null);
 }

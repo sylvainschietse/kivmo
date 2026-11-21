@@ -7,6 +7,7 @@ import { formatDate, formatMoney, formatSignedMoney } from "@/lib/format";
 import { progressRatio } from "@/domain/savings";
 import { Badge, Button, Card, EmptyState, ErrorFromQuery, Field, Input, LinkButton, Notice, OkFromQuery, PageHeader, Stat } from "@/components/ui";
 import { allocateAction, archiveProjectAction, createProjectAction, declareTransferAction, updateSharesAction } from "@/app/actions/savings";
+import { dayInZone } from "@/lib/dates";
 
 export const metadata = { title: "Projets et épargne" };
 
@@ -16,7 +17,7 @@ export default async function Projets({ searchParams }: { searchParams: Promise<
   const db = getDb();
   const ov = await savingsOverview(db, ctx);
   const projects = await projectFigures(db, ctx);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dayInZone(new Date());
   const totals = projects.reduce(
     (a, p) => ({ allocated: a.allocated.plus(p.figures.allocated), declared: a.declared.plus(p.figures.declaredManual), confirmed: a.confirmed.plus(p.figures.bankConfirmed) }),
     { allocated: D(0), declared: D(0), confirmed: D(0) },

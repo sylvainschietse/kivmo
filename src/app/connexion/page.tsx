@@ -2,6 +2,7 @@ import Link from "next/link";
 import { passwordLoginAction, passwordSignUpAction, requestLinkAction, startDemoAction } from "../actions/auth";
 import { Button, Card, ErrorFromQuery, Field, Input, Notice } from "@/components/ui";
 import { magicLinkAvailable, PASSWORD_MIN } from "@/server/auth";
+import { env } from "@/server/env";
 
 export const metadata = { title: "Connexion" };
 
@@ -19,6 +20,8 @@ export default async function Connexion({ searchParams }: { searchParams: Promis
     return s ? `/connexion?${s}` : "/connexion";
   };
   const linkAvailable = magicLinkAvailable();
+  // Le lien de développement n'est affiché que s'il pointe vers la page de vérification de ce site.
+  const devLink = q.dev && linkAvailable && q.dev.startsWith(`${env.appUrl}/connexion/verifier?`) ? q.dev : null;
 
   return (
     <main id="contenu" className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-8">
@@ -33,9 +36,9 @@ export default async function Connexion({ searchParams }: { searchParams: Promis
           {q.envoye ? (
             <Notice tone="gain" title="Lien envoyé">
               Si l&apos;adresse {q.email} est valide, un lien de connexion vient d&apos;être envoyé.
-              {q.dev && (
+              {devLink && (
                 <span className="mt-2 block">
-                  Mode développement (aucun email réel) : <a className="font-semibold underline" href={q.dev}>ouvrir le lien de connexion</a>
+                  Mode développement (aucun email réel) : <a className="font-semibold underline" href={devLink}>ouvrir le lien de connexion</a>
                 </span>
               )}
             </Notice>

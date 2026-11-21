@@ -8,7 +8,8 @@ import { sha256, signAttachmentUrl } from "../auth";
 import { env } from "../env";
 import { audit } from "../audit";
 
-export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+// Vercel refuse les envois de plus de 4,5 Mo : les photos sont réduites sur le téléphone avant l'envoi.
+export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const ALLOWED = new Map([
   ["image/jpeg", [0xff, 0xd8, 0xff]],
   ["image/png", [0x89, 0x50, 0x4e, 0x47]],
@@ -30,7 +31,7 @@ export function sniffMime(buf: Buffer, declared: string) {
  */
 export async function storeAttachment(db: DB, ctx: Ctx, input: { kind: string; mimeType: string; data: Buffer; organizationId?: string | null }) {
   if (input.data.length === 0) throw validation("Fichier vide.");
-  if (input.data.length > MAX_ATTACHMENT_BYTES) throw validation("Fichier trop volumineux (8 Mo maximum).");
+  if (input.data.length > MAX_ATTACHMENT_BYTES) throw validation("Fichier trop volumineux (4 Mo maximum).");
   if (!sniffMime(input.data, input.mimeType)) throw validation("Type de fichier non accepté (JPEG, PNG, WebP ou PDF).");
   const hash = sha256(input.data);
   const [existing] = await db.select().from(schema.attachments).where(and(eq(schema.attachments.ownerUserId, ctx.userId), eq(schema.attachments.sha256, hash), eq(schema.attachments.kind, input.kind)));
