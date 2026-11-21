@@ -1,6 +1,6 @@
 // Complète le projet Android généré par Capacitor : permissions utiles à KIVMO
 // (position pour les stations proches, appareil photo pour les tickets) et numéro de version.
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const manifestPath = "android/app/src/main/AndroidManifest.xml";
 let manifest = readFileSync(manifestPath, "utf8");
@@ -29,3 +29,38 @@ let gradle = readFileSync(gradlePath, "utf8");
 gradle = gradle.replace(/versionCode \d+/, `versionCode ${versionCode}`).replace(/versionName "[^"]*"/, `versionName "${versionName}"`);
 writeFileSync(gradlePath, gradle);
 console.log(`Android prêt : version ${versionName} (${versionCode}), permissions ${permissions.length}`);
+
+// Bouton retour d'Android : revient à la page précédente de KIVMO, et ne quitte l'appli
+// que depuis la première page (sans cela, il fermait l'appli depuis la fiche d'une station).
+const activityDir = "android/app/src/main/java/fr/kivmo/app";
+mkdirSync(activityDir, { recursive: true });
+writeFileSync(
+  `${activityDir}/MainActivity.java`,
+  `package fr.kivmo.app;
+
+import android.os.Bundle;
+import android.webkit.WebView;
+import androidx.activity.OnBackPressedCallback;
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                WebView web = getBridge() != null ? getBridge().getWebView() : null;
+                if (web != null && web.canGoBack()) {
+                    web.goBack();
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
+            }
+        });
+    }
+}
+`,
+);
+console.log("Bouton retour : historique de navigation");

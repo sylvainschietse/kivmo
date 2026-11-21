@@ -4,6 +4,7 @@ import { myOrganizations } from "@/server/services/organizations";
 import { unreadCount } from "@/server/services/notifications";
 import { BottomNav, Sidebar } from "@/components/nav";
 import { OfflineQueueBar } from "@/components/offline-queue";
+import { NavTracker } from "@/components/back-button";
 import { logoutAction } from "../actions/auth";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </form>
           </div>
         )}
+        <NavTracker />
         <OfflineQueueBar />
         <main id="contenu" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
           {children}
