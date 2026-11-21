@@ -5,6 +5,7 @@ import { listVehicles } from "@/server/services/vehicles";
 import { formatConsumption, formatKm, formatLiters, formatMoney } from "@/lib/format";
 import { Badge, Button, Card, ErrorFromQuery, Field, Input, Notice, OkFromQuery, Select, Stat, Table } from "@/components/ui";
 import { upsertBudgetAction } from "@/app/actions/organizations";
+import { dayInZone, endOfDayInZone, startOfMonthInZone, zonedMidnight } from "@/lib/dates";
 
 export default async function OrgDashboard({ params, searchParams }: { params: Promise<{ orgId: string }>; searchParams: Promise<{ from?: string; to?: string; ok?: string; erreur?: string }> }) {
   const { orgId } = await params;
@@ -12,13 +13,15 @@ export default async function OrgDashboard({ params, searchParams }: { params: P
   const { ctx } = await requireOrgPage(orgId);
   const db = getDb();
   const now = new Date();
-  const from = q.from ? new Date(q.from) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const to = q.to ? new Date(q.to + "T23:59:59Z") : now;
+  const validDay = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const fromDay = validDay(q.from), toDay = validDay(q.to);
+  const from = fromDay ? zonedMidnight(...(fromDay.split("-").map(Number) as [number, number, number])) : startOfMonthInZone(now);
+  const to = toDay ? endOfDayInZone(toDay) : now;
   const d = await fleetDashboard(db, ctx, orgId, from, to);
   const role = await orgRole(db, ctx, orgId);
   const admin = role === "owner" || role === "fleet_admin";
   const vehicles = admin ? await listVehicles(db, ctx, { organizationId: orgId }) : [];
-  const fromS = from.toISOString().slice(0, 10), toS = to.toISOString().slice(0, 10);
+  const fromS = dayInZone(from), toS = dayInZone(to);
   const exportQs = `organizationId=${orgId}&from=${fromS}&to=${toS}`;
 
   return (

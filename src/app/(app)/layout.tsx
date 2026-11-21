@@ -2,7 +2,7 @@ import { requireSession } from "@/server/session";
 import { getDb } from "@/db/client";
 import { myOrganizations } from "@/server/services/organizations";
 import { unreadCount } from "@/server/services/notifications";
-import { BottomNav, Sidebar } from "@/components/nav";
+import { BottomNav, MobileHeader, Sidebar } from "@/components/nav";
 import { OfflineQueueBar } from "@/components/offline-queue";
 import { NavTracker } from "@/components/back-button";
 import { logoutAction } from "../actions/auth";
@@ -29,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </form>
           </div>
         )}
+        <MobileHeader unread={unread} />
         <NavTracker />
         <OfflineQueueBar />
         <main id="contenu" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-5 sm:px-6 lg:pb-10">

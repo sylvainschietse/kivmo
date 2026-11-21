@@ -239,6 +239,7 @@ export const fillupPatch = fillupInput.omit({ vehicleId: true, source: true }).p
  */
 export async function updateFillup(db: DB, ctx: Ctx, fillupId: string, raw: z.input<typeof fillupPatch>, expectedVersion: number, opts: { closedPeriodCorrection?: boolean } = {}) {
   const { fillup, vehicle, role } = await requireFillup(db, ctx, fillupId, "write");
+  if (role === "driver" && fillup.reimbursedAt) throw new AppError("FORBIDDEN", "Ce plein a déjà été remboursé : demandez une correction à votre gestionnaire.");
   const parsed = fillupPatch.safeParse(raw);
   if (!parsed.success) throw validation("Correction invalide.", parsed.error.flatten());
   const p = parsed.data;
@@ -253,10 +254,34 @@ export async function updateFillup(db: DB, ctx: Ctx, fillupId: string, raw: z.in
   const lines = p.lines ? resolveLines(p.lines) : null;
   if (lines && !Array.isArray(lines)) return { status: "amount_mismatch" as const, ...lines };
 
+  // Mêmes contrôles qu'à la création : date future et volume nul refusés, compteur incohérent signalé.
+  const occurredAt = p.occurredAt ?? fillup.occurredAt;
+  const odometer = p.odometerKm ? D(p.odometerKm) : D(fillup.odometerKm);
+  const currentLines = lines ?? (await db.select().from(schema.fillupLines).where(eq(schema.fillupLines.fillupId, fillupId))).map((l) => ({ liters: D(l.liters) }));
+  const events = await db.select().from(schema.odometerEvents).where(eq(schema.odometerEvents.vehicleId, vehicle.id));
+  const norm = (raw: string | Decimal, at: Date) => normalizeOdometer(D(raw), at, events);
+  const { previous, next } = await neighbours(db, vehicle.id, occurredAt, odometer.toString(), fillupId);
+  const issues = validateFillup({
+    occurredAt,
+    odometerKm: norm(odometer, occurredAt),
+    liters: sum(currentLines.map((l) => l.liters)),
+    tankCapacityL: vehicle.tankCapacityL ? D(vehicle.tankCapacityL) : null,
+    previous: previous ? { occurredAt: previous.occurredAt, odometerKm: norm(previous.odometerKm, previous.occurredAt) } : null,
+    next: next ? { occurredAt: next.occurredAt, odometerKm: norm(next.odometerKm, next.occurredAt) } : null,
+  });
+  const blocking = issues.filter((i) => i.level === "blocking");
+  if (blocking.length) throw validation(blocking.map((b) => b.message).join(" "), { issues: blocking });
+  const warnings = issues.map((i) => i.message);
+
+  const [profile] = await db.select({ tz: schema.profiles.timeZone }).from(schema.profiles).where(eq(schema.profiles.userId, fillup.createdBy));
+
   return db.transaction(async (tx) => {
     const before = { ...fillup };
     const patch: Partial<typeof schema.fillups.$inferInsert> = { updatedAt: new Date(), version: fillup.version + 1 };
-    if (p.occurredAt) patch.occurredAt = p.occurredAt;
+    if (p.occurredAt) {
+      patch.occurredAt = p.occurredAt;
+      patch.localDate = localDate(p.occurredAt, profile?.tz ?? "Europe/Paris");
+    }
     if (p.odometerKm) patch.odometerKm = toDb(p.odometerKm, 1);
     if (p.isFull !== undefined) patch.isFull = p.isFull;
     if (p.startsNewBaseline !== undefined) patch.startsNewBaseline = p.startsNewBaseline;
@@ -265,8 +290,11 @@ export async function updateFillup(db: DB, ctx: Ctx, fillupId: string, raw: z.in
     if (p.stationLabel !== undefined) patch.stationLabel = p.stationLabel;
     if (p.usage) patch.usage = p.usage;
     if (p.category !== undefined) patch.category = p.category;
-    if (p.referencePrice) {
-      const snap = await referenceSnapshot(tx, vehicle.id, p.occurredAt ?? fillup.occurredAt, null, p.referencePrice);
+    // Prix de référence revu si l'utilisateur en saisit un, ou si la date ou la station changent.
+    const stationChanged = p.stationId !== undefined && p.stationId !== fillup.stationId;
+    const dateChanged = Boolean(p.occurredAt) && p.occurredAt!.getTime() !== fillup.occurredAt.getTime();
+    if (p.referencePrice || stationChanged || (dateChanged && fillup.refPriceSource?.startsWith("station:"))) {
+      const snap = await referenceSnapshot(tx, vehicle.id, occurredAt, p.stationId !== undefined ? p.stationId : fillup.stationId, p.referencePrice ?? null);
       if (snap) Object.assign(patch, { refPriceFuel: snap.fuel, refPrice: toDb(snap.price, 4), refPriceSource: snap.source, refPriceObservedAt: snap.observedAt });
     }
     if (p.accountingFields) patch.accountingFields = p.accountingFields;
@@ -276,7 +304,9 @@ export async function updateFillup(db: DB, ctx: Ctx, fillupId: string, raw: z.in
       patch.displayedTotal = toDb(sum(lines.map((l) => l.liters.times(l.unitPrice))), 4);
       patch.discount = toDb(sum(lines.map((l) => l.discount)), 4);
     }
-    if (role === "driver" && fillup.approvalStatus === "to_complete") patch.approvalStatus = "submitted";
+    // Un conducteur qui modifie un plein déjà validé (ou refusé) le renvoie en validation :
+    // le gestionnaire revoit le montant avant tout remboursement.
+    if (role === "driver" && ["to_complete", "validated", "rejected"].includes(fillup.approvalStatus)) patch.approvalStatus = "submitted";
     const [row] = await tx.update(schema.fillups).set(patch).where(and(eq(schema.fillups.id, fillupId), eq(schema.fillups.version, expectedVersion))).returning();
     if (!row) throw new AppError("VERSION_CONFLICT", "Ce plein a été modifié entre-temps. Rechargez pour voir la dernière version avant de corriger.");
     if (lines) {
@@ -292,7 +322,7 @@ export async function updateFillup(db: DB, ctx: Ctx, fillupId: string, raw: z.in
       resourceId: fillupId,
       details: { reason: p.correctionReason ?? null, before: { total: before.totalPaid, odometer: before.odometerKm, occurredAt: before.occurredAt }, after: { total: row.totalPaid, odometer: row.odometerKm, occurredAt: row.occurredAt } },
     });
-    return { status: "updated" as const, fillup: row };
+    return { status: "updated" as const, fillup: row, warnings };
   });
 }
 

@@ -25,6 +25,22 @@ export function safeEqual(a: string, b: string) {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
+/**
+ * Adresse de retour après connexion : uniquement un chemin du site.
+ * Refuse « //site », « /\\site » et les caractères de contrôle, qui mèneraient vers un autre site.
+ */
+export function safeNextPath(raw: unknown, fallback = "/accueil") {
+  const next = typeof raw === "string" ? raw : "";
+  if (!next.startsWith("/") || next.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(next)) return fallback;
+  try {
+    const u = new URL(next, "https://kivmo.invalid");
+    if (u.origin !== "https://kivmo.invalid") return fallback;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return fallback;
+  }
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** L'envoi de liens par email est-il réellement possible ici ? */
@@ -59,8 +75,11 @@ function checkPasswordStrength(password: string, email: string) {
   if (password.toLowerCase() === email) throw new AppError("VALIDATION", "Le mot de passe ne peut pas être votre adresse email.");
 }
 
+/** Compte créé par mot de passe sans preuve que l'adresse appartient à la personne. */
+export const UNVERIFIED_STATUS = "email_non_verifie";
+
 async function newUser(tx: DB, email: string, passwordHash: string | null) {
-  const [user] = await tx.insert(schema.users).values({ email, passwordHash }).returning();
+  const [user] = await tx.insert(schema.users).values({ email, passwordHash, status: passwordHash ? UNVERIFIED_STATUS : "active" }).returning();
   await tx.insert(schema.profiles).values({ userId: user.id });
   await tx.insert(schema.notificationPreferences).values({ userId: user.id });
   return user;
@@ -115,7 +134,7 @@ export async function requestMagicLink(db: DB, rawEmail: string, nextPath = "/ac
     tokenHash: sha256(token),
     expiresAt: new Date(Date.now() + MAGIC_LINK_MINUTES * 60_000),
   });
-  const safeNext = nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/accueil";
+  const safeNext = safeNextPath(nextPath);
   const link = `${env.appUrl}/connexion/verifier?token=${encodeURIComponent(token)}&next=${encodeURIComponent(safeNext)}`;
   const delivery = await sendEmail({
     to: email,
@@ -145,6 +164,13 @@ export async function consumeMagicLink(db: DB, token: string, userAgent?: string
       isNew = true;
     }
     if (user.deletedAt) throw new AppError("FORBIDDEN", "Ce compte a été supprimé.");
+    if (user.status === UNVERIFIED_STATUS) {
+      // Le lien prouve que l'adresse est à cette personne. Un mot de passe posé avant cette preuve
+      // a pu l'être par quelqu'un d'autre : il est effacé et les sessions ouvertes avec lui sont fermées.
+      await tx.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+      [user] = await tx.update(schema.users).set({ status: "active", passwordHash: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id)).returning();
+      await audit(tx, { actorUserId: user.id, action: "auth.email_verified", resourceType: "user", resourceId: user.id, details: { passwordReset: true } });
+    }
     const sessionToken = await createSession(tx as unknown as DB, user.id, userAgent);
     await audit(tx, { actorUserId: user.id, action: "auth.login", resourceType: "user", resourceId: user.id });
     return { user, sessionToken, isNew };

@@ -3,11 +3,14 @@ import { schema, type DB, type DBOrTx } from "@/db/client";
 import { AppError, validation } from "../errors";
 import { requireOrgRole, type Ctx } from "../authz";
 import { audit } from "../audit";
+import { dayInZone } from "@/lib/dates";
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
+
 export async function isInClosedPeriod(db: DBOrTx, organizationId: string, at: Date) {
-  const day = isoDate(at);
+  // Jour civil en heure de Paris, comme les bornes des périodes et la date locale des pleins.
+  const day = dayInZone(at);
   const [p] = await db
     .select()
     .from(schema.accountingPeriods)

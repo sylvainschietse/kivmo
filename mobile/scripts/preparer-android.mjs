@@ -54,8 +54,9 @@ public class MainActivity extends BridgeActivity {
                 if (web != null && web.canGoBack()) {
                     web.goBack();
                 } else {
-                    setEnabled(false);
-                    getOnBackPressedDispatcher().onBackPressed();
+                    // Mise en arrière-plan sans désactiver ce comportement :
+                    // à la réouverture, le bouton retour revient toujours à la page précédente.
+                    moveTaskToBack(true);
                 }
             }
         });

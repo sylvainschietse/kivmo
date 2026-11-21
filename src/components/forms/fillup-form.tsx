@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button, Card, Field, Input, Notice, Select, cx } from "@/components/ui";
 import { IconCamera, IconLocate, IconMic, IconPlus } from "@/components/icons";
 import { enqueueFillup, readQueue, sendFillup, writeQueue, type QueuedFillup } from "@/components/offline-queue";
-import { PhotoButton, scanPhotos, type ScanState } from "@/components/photo-scan";
+import { PhotoButton, scanPhotos, shrinkPhoto, UNSUPPORTED_PHOTO_MESSAGE, type ScanState } from "@/components/photo-scan";
+import { kmDigits } from "@/lib/format";
 
 type Fuel = "E85" | "SP95" | "SP95_E10" | "SP98" | "GAZOLE" | "GPL" | "ELEC_KWH";
 const FUEL_LABELS: Record<Fuel, string> = { E85: "E85", SP95: "SP95", SP95_E10: "SP95-E10", SP98: "SP98", GAZOLE: "Gazole", GPL: "GPL", ELEC_KWH: "Électricité (kWh)" };
@@ -187,7 +188,15 @@ export function FillupForm(p: FillupFormProps) {
   async function upload(file: File) {
     setUploadMsg("Envoi du ticket…");
     const fd = new FormData();
-    fd.set("file", file);
+    if (file.type === "application/pdf") {
+      if (file.size > 4 * 1024 * 1024) return setUploadMsg("PDF trop lourd (4 Mo maximum). Prenez plutôt le ticket en photo.");
+      fd.set("file", file);
+    } else {
+      // Photo réduite sur le téléphone : les envois de plus de 4,5 Mo sont refusés par l'hébergeur.
+      const small = await shrinkPhoto(file, 2000, 0.85);
+      if (small === file && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) return setUploadMsg(UNSUPPORTED_PHOTO_MESSAGE);
+      fd.set("file", small, "ticket.jpg");
+    }
     fd.set("kind", "ticket");
     if (vehicle?.organizationId) fd.set("organizationId", vehicle.organizationId);
     try {
@@ -210,11 +219,16 @@ export function FillupForm(p: FillupFormProps) {
     const x = r.result;
     const filled: string[] = [];
     const marks: Record<string, boolean> = {};
-    const digits = x.odometerKm?.replace(/\D/g, "") ?? "";
+    const digits = kmDigits(x.odometerKm);
+    let jumpWarning = "";
     if (digits) {
       setOdometer(digits);
       marks.odometer = true;
       filled.push(`compteur ${Number(digits).toLocaleString("fr-FR")} km`);
+      const last = Number(p.lastOdometer[vehicleId] ?? NaN);
+      if (Number.isFinite(last) && (Number(digits) < last || Number(digits) - last > 5000)) {
+        jumpWarning = ` Attention : le compteur lu s'écarte beaucoup du dernier relevé (${last.toLocaleString("fr-FR")} km), vérifiez-le.`;
+      }
     }
     const dec = (v: string | null) => (v && num(v) !== null ? v.replace(".", ",") : "");
     const L = dec(x.liters), P = dec(x.unitPrice), T = dec(x.total);
@@ -233,7 +247,7 @@ export function FillupForm(p: FillupFormProps) {
     if (x.date && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(x.date) && x.date <= localNow()) { setOccurredAt(x.date); marks.occurredAt = true; }
     if (x.stationName && !stationLabel) { setStationLabel(x.stationName); marks.station = true; }
     setFromPhoto((m) => ({ ...m, ...marks }));
-    const doubt = x.confidence !== "haute" ? " Lecture incertaine : vérifiez bien." : "";
+    const doubt = (x.confidence !== "haute" ? " Lecture incertaine : vérifiez bien." : "") + jumpWarning;
     setScan((s) => ({
       ...s,
       [kind]: filled.length
@@ -490,7 +504,7 @@ export function FillupForm(p: FillupFormProps) {
           <div className="flex flex-wrap gap-2">
             <label className="tap inline-flex cursor-pointer items-center gap-2 rounded-xl bg-surface-2 px-4 py-2 text-sm font-semibold">
               <IconCamera width={18} /> Photo du ticket
-              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" className="sr-only" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) upload(f); }} />
             </label>
             <Button type="button" variant="secondary" onClick={dictate}><IconMic width={18} /> Dicter</Button>
           </div>

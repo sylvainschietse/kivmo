@@ -2,7 +2,7 @@ import { and, desc, eq, gt, inArray, isNull, sql, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { schema, type DB, type DBOrTx } from "@/db/client";
 import { D, Decimal, sum, ZERO } from "@/lib/decimal";
-import { AppError, validation } from "../errors";
+import { AppError, forbidden, notFound, validation } from "../errors";
 import { membershipOf, requireFillup, requireOrgRole, type Ctx, type OrgRole } from "../authz";
 import { audit } from "../audit";
 import { randomToken, sha256 } from "../auth";
@@ -11,6 +11,7 @@ import { env } from "../env";
 import { loadVehicleData } from "./recompute";
 import { listVehicles } from "./vehicles";
 import { averageConsumption } from "@/domain/consumption";
+import { startOfMonthInZone, startOfYearInZone } from "@/lib/dates";
 
 export const ROLE_LABELS: Record<OrgRole, string> = {
   owner: "Propriétaire",
@@ -102,8 +103,12 @@ export async function listInvitations(db: DBOrTx, ctx: Ctx, organizationId: stri
 }
 
 export async function removeMember(db: DB, ctx: Ctx, organizationId: string, userId: string) {
-  await requireOrgRole(db, ctx, organizationId, "admin");
+  const me = await requireOrgRole(db, ctx, organizationId, "admin");
   if (userId === ctx.userId) throw validation("Vous ne pouvez pas vous retirer vous-même.");
+  const target = await membershipOf(db, { userId, isDemo: false, isPlatformAdmin: false }, organizationId);
+  if (!target) throw notFound("Membre introuvable.");
+  // Seul un propriétaire peut retirer un autre propriétaire : un administrateur de flotte ne peut pas prendre l'organisation.
+  if (target.role === "owner" && me.role !== "owner") throw forbidden("Seul un propriétaire peut retirer un propriétaire.");
   await db.update(schema.memberships).set({ endsAt: new Date() }).where(and(eq(schema.memberships.organizationId, organizationId), eq(schema.memberships.userId, userId)));
   await audit(db, { actorUserId: ctx.userId, organizationId, action: "member.remove", resourceType: "membership", resourceId: userId });
 }
@@ -220,7 +225,7 @@ export async function fleetDashboard(db: DBOrTx, ctx: Ctx, organizationId: strin
   const budgetRows = await db.select().from(schema.budgets).where(eq(schema.budgets.organizationId, organizationId));
   const now = new Date();
   const budgets = budgetRows.map((b) => {
-    const start = b.period === "mensuel" ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)) : new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    const start = b.period === "mensuel" ? startOfMonthInZone(now) : startOfYearInZone(now);
     const scoped = rows.filter((r) => r.occurredAt >= start && (b.scope === "flotte" || (b.scope === "vehicule" && r.vehicleId === b.scopeId) || (b.scope === "equipe" && vehicles.find((v) => v.id === r.vehicleId)?.teamId === b.scopeId)));
     const consumed = sum(scoped.map((r) => D(r.totalPaid)));
     const ratio = D(b.amount).gt(0) ? consumed.div(b.amount) : ZERO;

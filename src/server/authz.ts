@@ -57,7 +57,7 @@ export async function requireVehicle(db: DBOrTx, ctx: Ctx, vehicleId: string, ac
     const [a] = await db
       .select({ id: schema.vehicleAssignments.id })
       .from(schema.vehicleAssignments)
-      .where(and(eq(schema.vehicleAssignments.vehicleId, v.id), eq(schema.vehicleAssignments.userId, ctx.userId)));
+      .where(and(eq(schema.vehicleAssignments.vehicleId, v.id), eq(schema.vehicleAssignments.userId, ctx.userId), or(isNull(schema.vehicleAssignments.endsAt), sql`${schema.vehicleAssignments.endsAt} > now()`)));
     if (!a) throw notFound("Véhicule introuvable.");
   }
   return { vehicle: v, role: m.role as OrgRole | "personal", membership: m };

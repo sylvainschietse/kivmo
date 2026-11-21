@@ -16,6 +16,7 @@ import { MaintenanceScan } from "@/components/forms/maintenance-scan";
 import { ocrAvailable } from "@/integrations/ocr";
 import { signAttachmentUrl } from "@/server/auth";
 import { addMaintenanceAction, addReferenceAction, archiveVehicleAction, completeReminderAction, odometerReplacementAction, setConversionAction, updateVehicleAction } from "@/app/actions/vehicles";
+import { dayInZone } from "@/lib/dates";
 
 const KIND_LABELS: Record<string, string> = { ancien_vehicule: "Ancien véhicule", meme_vehicule_autre_carburant: "Même véhicule, autre carburant", scenario_libre: "Scénario libre" };
 const MAINT: Record<string, string> = { entretien: "Entretien", controle_technique: "Contrôle technique", pneus: "Pneus", reparation: "Réparation", immobilisation: "Immobilisation" };
@@ -39,7 +40,7 @@ export default async function VehiculeDetail({ params, searchParams }: { params:
   const maint = await db.select().from(schema.maintenanceEvents).where(eq(schema.maintenanceEvents.vehicleId, id)).orderBy(desc(schema.maintenanceEvents.occurredOn));
   const reminders = await db.select().from(schema.reminders).where(eq(schema.reminders.vehicleId, id));
   const maintTotal = maint.reduce((a, m) => a.plus(m.cost ?? 0), D(0));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dayInZone(new Date());
   const photoUrl = vehicle.photoAttachmentId ? signAttachmentUrl(vehicle.photoAttachmentId, 3600) : null;
 
   return (

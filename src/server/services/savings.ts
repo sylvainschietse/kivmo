@@ -14,6 +14,7 @@ import { bankProvider, ProviderTimeoutError, signWebhook, SANDBOX_PROVIDER } fro
 import { env } from "../env";
 import { safeEqual } from "../auth";
 import { notify } from "./notifications";
+import { dayInZone } from "@/lib/dates";
 
 /* ───────── Gains de l'utilisateur ───────── */
 
@@ -138,16 +139,25 @@ export async function allocateAvailableGains(db: DB, ctx: Ctx) {
   return db.transaction(async (tx) => {
     await lockUser(tx, ctx.userId);
     const ov = await savingsOverview(tx, ctx);
-    if (ov.capacity.capacity.lt("0.01")) return { lines: [], capacity: ov.capacity };
+    // Gains déjà « examinés » par les affectations précédentes, même si une partie est restée
+    // volontairement non affectée (pourcentages < 100 %) : seuls les gains nouveaux sont répartis.
+    const [{ considered }] = await tx.execute<{ considered: string }>(sql`
+      select coalesce(sum(c), 0)::text as considered from (
+        select distinct on (batch_id) coalesce(basis_snapshot->>'considered', basis_snapshot->>'capacity')::numeric as c
+        from allocations where owner_user_id = ${ctx.userId}
+      ) b`);
+    const fresh = ov.capacity.basis.minus(D(considered ?? "0"));
+    const available = Decimal.min(fresh, ov.capacity.capacity);
+    if (available.lt("0.01")) return { lines: [], capacity: ov.capacity };
     const projects = await tx.select().from(schema.projects).where(and(eq(schema.projects.ownerUserId, ctx.userId), isNull(schema.projects.archivedAt)));
     const lines = splitAllocation(
-      ov.capacity.capacity,
+      available,
       projects.map((p) => ({ projectId: p.id, percent: p.sharePercent ? D(p.sharePercent) : null, fixedAmount: p.shareFixedAmount ? D(p.shareFixedAmount) : null })),
     );
     if (!lines.length) throw validation("Définissez une répartition (pourcentage ou montant) sur au moins un projet.");
     const batchId = crypto.randomUUID();
     await tx.insert(schema.allocations).values(
-      lines.map((l) => ({ ownerUserId: ctx.userId, projectId: l.projectId, amount: toDb(l.amount, 4), batchId, basisSnapshot: { calculatedGains: ov.gains.calculatedGains.toString(), conversionCost: ov.gains.conversionCost.toString(), deductConversion: ov.deductConversion, capacity: ov.capacity.capacity.toString() } })),
+      lines.map((l) => ({ ownerUserId: ctx.userId, projectId: l.projectId, amount: toDb(l.amount, 4), batchId, basisSnapshot: { calculatedGains: ov.gains.calculatedGains.toString(), conversionCost: ov.gains.conversionCost.toString(), deductConversion: ov.deductConversion, capacity: ov.capacity.capacity.toString(), considered: available.toString() } })),
     );
     await audit(tx, { actorUserId: ctx.userId, action: "allocation.batch", resourceType: "allocation", resourceId: batchId, details: { lines: lines.map((l) => ({ p: l.projectId, a: l.amount.toString() })) } });
     return { lines, capacity: ov.capacity };
@@ -226,7 +236,7 @@ async function setOrderState(tx: DBOrTx, order: typeof schema.paymentOrders.$inf
     // Une seule entrée d'épargne confirmée par ordre (index unique) : rejeu sans effet (cas F).
     await tx
       .insert(schema.savingsEntries)
-      .values({ ownerUserId: row.ownerUserId, projectId: row.projectId, kind: "bank_confirmed", amount: row.amount, occurredOn: new Date().toISOString().slice(0, 10), paymentOrderId: row.id, provenance: `Confirmation ${row.providerOrderRef ?? ""}`.trim() })
+      .values({ ownerUserId: row.ownerUserId, projectId: row.projectId, kind: "bank_confirmed", amount: row.amount, occurredOn: dayInZone(new Date()), paymentOrderId: row.id, provenance: `Confirmation ${row.providerOrderRef ?? ""}`.trim() })
       .onConflictDoNothing({ target: schema.savingsEntries.paymentOrderId });
     await notify(tx, row.ownerUserId, { kind: "epargne", title: "Virement confirmé", body: `Votre virement de ${formatMoney(row.amount)} a été confirmé par la banque.`, link: "/projets", dedupeKey: `payment-confirmed:${row.id}` });
   }

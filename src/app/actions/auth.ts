@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getDb } from "@/db/client";
-import { requestMagicLink, destroySession, createSession, loginWithPassword, signUpWithPassword, SESSION_COOKIE } from "@/server/auth";
+import { requestMagicLink, destroySession, createSession, loginWithPassword, safeNextPath, signUpWithPassword, SESSION_COOKIE } from "@/server/auth";
 import { AppError } from "@/server/errors";
-import { clearSessionCookie, setSessionCookie, userAgent } from "@/server/session";
+import { checkIpRateLimit, clearSessionCookie, setSessionCookie, userAgent } from "@/server/session";
 import { createDemoAccount } from "@/server/services/demo";
 import { env } from "@/server/env";
 import { checkRateLimit } from "@/server/rate-limit";
@@ -15,6 +15,7 @@ export async function requestLinkAction(fd: FormData) {
   const next = String(fd.get("next") ?? "/accueil");
   try {
     await checkRateLimit(getDb(), `magic:${email.toLowerCase()}`, 5, 900);
+    await checkIpRateLimit("magic-ip", 20, 3600);
     const { delivery, devLink } = await requestMagicLink(getDb(), email, next);
     // En ligne sans fournisseur d'email, rien n'est réellement envoyé : on le dit plutôt que d'annoncer un envoi.
     if (delivery === "console" && !devLink) throw new AppError("NOT_CONNECTED", "L'envoi des emails de connexion n'est pas encore branché. Utilisez le mode démonstration en attendant.");
@@ -28,8 +29,7 @@ export async function requestLinkAction(fd: FormData) {
 }
 
 function safeNext(raw: FormDataEntryValue | null) {
-  const next = String(raw ?? "/accueil");
-  return next.startsWith("/") && !next.startsWith("//") ? next : "/accueil";
+  return safeNextPath(raw);
 }
 
 function backToLogin(mode: "connexion" | "creation", email: string, message: string, next: string) {
@@ -46,6 +46,7 @@ export async function passwordLoginAction(fd: FormData) {
   let target = next;
   try {
     await checkRateLimit(getDb(), `login:${email}`, 10, 900);
+    await checkIpRateLimit("login-ip", 30, 900);
     const { user, sessionToken } = await loginWithPassword(getDb(), email, password, await userAgent());
     await setSessionCookie(sessionToken);
     if (!user.onboardedAt && !next.startsWith("/invitation")) target = "/onboarding";
@@ -64,6 +65,7 @@ export async function passwordSignUpAction(fd: FormData) {
   try {
     if (password !== confirm) throw new AppError("VALIDATION", "Les deux mots de passe ne sont pas identiques.");
     await checkRateLimit(getDb(), `signup:${email}`, 5, 900);
+    await checkIpRateLimit("signup-ip", 10, 3600);
     const { sessionToken } = await signUpWithPassword(getDb(), email, password, await userAgent());
     await setSessionCookie(sessionToken);
   } catch (e) {
@@ -76,6 +78,13 @@ export async function passwordSignUpAction(fd: FormData) {
 export async function startDemoAction() {
   if (!env.demoEnabled) redirect("/?erreur=" + encodeURIComponent("Mode démonstration désactivé."));
   const db = getDb();
+  try {
+    await checkIpRateLimit("demo-ip", 10, 3600);
+    await checkRateLimit(db, "demo-global", 300, 86400);
+  } catch (e) {
+    if (e instanceof AppError) redirect("/?erreur=" + encodeURIComponent("Trop de démonstrations ouvertes. Réessayez plus tard."));
+    throw e;
+  }
   const ctx = await createDemoAccount(db);
   const token = await createSession(db, ctx.userId, await userAgent());
   await setSessionCookie(token);
@@ -87,5 +96,6 @@ export async function logoutAction() {
   const t = jar.get(SESSION_COOKIE)?.value;
   if (t) await destroySession(getDb(), t);
   await clearSessionCookie();
-  redirect("/");
+  // L'adresse signale au service worker d'effacer les pages gardées sur le téléphone.
+  redirect("/?deconnecte=1");
 }
