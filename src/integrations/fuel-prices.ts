@@ -246,7 +246,8 @@ export async function importAllFuelPrices(db: DB, opts: { fetchImpl?: typeof fet
 
 /**
  * Rafraîchit les prix autour d'un point si la zone n'a pas de prix récent (moins de 3 h).
- * Une même zone (maille d'environ 10 km) n'est interrogée qu'une fois par heure.
+ * Une même zone (maille d'environ 10 km) n'est interrogée qu'une fois toutes les 3 heures,
+ * même quand les prix n'ont pas changé (aucune nouvelle ligne enregistrée).
  * En cas d'échec de la source, les derniers prix datés restent affichés.
  */
 export async function refreshAreaIfStale(db: DB, lat: number, lng: number, radiusKm: number) {
@@ -263,8 +264,8 @@ export async function refreshAreaIfStale(db: DB, lat: number, lng: number, radiu
   const [slot] = await db.execute<{ count: number }>(sql`
     insert into rate_limits (key, window_start, count) values (${"prix-zone:" + cell}, now(), 1)
     on conflict (key) do update set
-      count = case when rate_limits.window_start < now() - interval '1 hour' then 1 else rate_limits.count + 1 end,
-      window_start = case when rate_limits.window_start < now() - interval '1 hour' then now() else rate_limits.window_start end
+      count = case when rate_limits.window_start < now() - interval '3 hours' then 1 else rate_limits.count + 1 end,
+      window_start = case when rate_limits.window_start < now() - interval '3 hours' then now() else rate_limits.window_start end
     returning count`);
   if (Number(slot?.count ?? 0) > 1) return { refreshed: false as const };
   const r = await importFuelPrices(db, { lat, lng, radiusKm: Math.max(radius, 10), maxRecords: 500 });

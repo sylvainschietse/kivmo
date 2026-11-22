@@ -8,6 +8,7 @@ import type { Ctx } from "../authz";
 import { loadVehicleData } from "./recompute";
 import { projectFigures, savingsOverview } from "./savings";
 import { requireVehicle } from "../authz";
+import { startOfMonthInZone } from "@/lib/dates";
 
 export interface VehicleSummary {
   vehicle: typeof schema.vehicles.$inferSelect;
@@ -68,7 +69,7 @@ export async function homeData(db: DBOrTx, ctx: Ctx) {
   const summary = activeId ? await vehicleSummary(db, ctx, activeId, profile?.timeZone) : null;
   const tz = profile?.timeZone ?? "Europe/Paris";
   const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthStart = startOfMonthInZone(now, tz);
   const monthFillups = activeId ? await db.select().from(schema.fillups).where(and(eq(schema.fillups.vehicleId, activeId), isNull(schema.fillups.deletedAt), gte(schema.fillups.occurredAt, monthStart))) : [];
   const projects = await projectFigures(db, ctx);
   const primary = projects.find((p) => p.project.isPrimary) ?? projects[0] ?? null;

@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { Suspense } from "react";
 import { stationTitle } from "@/integrations/station-names";
 import { StationsMap, type MapPoint } from "@/components/stations-map";
@@ -27,8 +28,9 @@ export default async function Stations({ searchParams }: { searchParams: Promise
   const hasPos = Number.isFinite(lat) && Number.isFinite(lng);
   const includeDemo = ctx.isDemo;
   const sort: StationSort = q.tri && q.tri in STATION_SORTS ? (q.tri as StationSort) : fuel ? "prix" : "distance";
-  // Prix officiels de la zone rafraîchis à la demande s'ils datent de plus de 3 h (sans bloquer en cas d'échec).
-  if (hasPos && !includeDemo) await refreshAreaIfStale(db, lat, lng, Number(q.rayon ?? 10) || 10).catch(() => undefined);
+  // Prix officiels de la zone rafraîchis en arrière-plan s'ils datent de plus de 3 h : la page s'affiche
+  // tout de suite avec les derniers prix connus (l'import national quotidien couvre toute la France).
+  if (hasPos && !includeDemo) after(() => refreshAreaIfStale(db, lat, lng, Number(q.rayon ?? 10) || 10).catch(() => undefined));
   const results = hasPos
     ? await nearbyStations(db, ctx, { lat, lng, radiusKm: Number(q.rayon ?? 10) || 10, fuel, maxPriceAgeHours: q.age ? Number(q.age) : null, excludeRupture: q.rupture === "1", openNow: q.ouvert === "1", brand: q.marque || null, service: q.service || null, includeDemo, limit: 30, sort })
     : q.q

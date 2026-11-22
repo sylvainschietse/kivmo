@@ -17,6 +17,8 @@ export async function shrinkPhoto(file: File, maxSide = 1600, quality = 0.85): P
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b ?? file), "image/jpeg", quality));
 }
 
+export const UNSUPPORTED_PHOTO_MESSAGE = "Format de photo non pris en charge (par exemple HEIC d'iPhone). Dans les réglages de l'appareil photo, choisissez « Le plus compatible » (JPEG), ou complétez à la main.";
+
 export async function photoToDataUrl(file: File, maxSide: number, quality = 0.8) {
   const blob = await shrinkPhoto(file, maxSide, quality);
   return new Promise<string>((resolve, reject) => {
@@ -33,13 +35,21 @@ export type ScanState = { status: "idle" | "reading" | "done" | "error"; message
 export async function scanPhotos<T>(target: "fillup" | "vehicle" | "maintenance", photos: Record<string, File>): Promise<{ ok: true; result: T } | { ok: false; message: string }> {
   const fd = new FormData();
   fd.set("target", target);
-  for (const [kind, file] of Object.entries(photos)) fd.set(kind, await shrinkPhoto(file), `${kind}.jpg`);
+  for (const [kind, file] of Object.entries(photos)) {
+    const small = await shrinkPhoto(file);
+    if (small === file && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) return { ok: false, message: UNSUPPORTED_PHOTO_MESSAGE };
+    fd.set(kind, small, `${kind}.jpg`);
+  }
   try {
-    const res = await fetch("/api/scan", { method: "POST", body: fd });
+    // La lecture prend en général quelques secondes ; au-delà de 50 s, on abandonne proprement.
+    const res = await fetch("/api/scan", { method: "POST", body: fd, signal: AbortSignal.timeout(50_000) });
     const body = await res.json().catch(() => null);
+    if (res.status === 413) return { ok: false, message: "Photo trop lourde. Réessayez, ou complétez à la main." };
+    if (res.status === 504) return { ok: false, message: "La lecture a pris trop de temps. Réessayez avec une photo plus nette, ou complétez à la main." };
     if (!res.ok) return { ok: false, message: body?.error?.message ?? "Lecture impossible." };
     return { ok: true, result: body.result as T };
-  } catch {
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") return { ok: false, message: "La lecture a pris trop de temps. Réessayez avec une photo plus nette, ou complétez à la main." };
     return { ok: false, message: "Pas de réseau : la lecture des photos demande une connexion. Complétez à la main." };
   }
 }

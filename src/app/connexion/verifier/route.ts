@@ -1,13 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb } from "@/db/client";
-import { consumeMagicLink, SESSION_COOKIE, SESSION_DAYS } from "@/server/auth";
+import { consumeMagicLink, safeNextPath, SESSION_COOKIE, SESSION_DAYS } from "@/server/auth";
 import { AppError } from "@/server/errors";
 import { env } from "@/server/env";
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? "";
-  const nextRaw = req.nextUrl.searchParams.get("next") ?? "/accueil";
-  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/accueil";
+  const next = safeNextPath(req.nextUrl.searchParams.get("next"));
   try {
     const { sessionToken, user, isNew } = await consumeMagicLink(getDb(), token, req.headers.get("user-agent"));
     const res = NextResponse.redirect(new URL((isNew || !user.onboardedAt) && !next.startsWith("/invitation") ? "/onboarding" : next, req.url));

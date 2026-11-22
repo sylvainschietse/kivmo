@@ -87,7 +87,7 @@ export function ocrAvailable() {
 
 function getClient() {
   if (!env.anthropicApiKey) return null;
-  client ??= new Anthropic({ apiKey: env.anthropicApiKey, timeout: 60_000, maxRetries: 1 });
+  client ??= new Anthropic({ apiKey: env.anthropicApiKey, timeout: 40_000, maxRetries: 0 });
   return client;
 }
 

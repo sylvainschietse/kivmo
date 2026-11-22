@@ -63,3 +63,15 @@ export function formatAge(d: Date | string, now = new Date()): string {
   if (h < 48) return `il y a ${h} h`;
   return `il y a ${Math.round(h / 24)} j`;
 }
+
+/**
+ * Kilométrage lu sur une photo : garde les kilomètres entiers.
+ * « 123 456,7 » ou « 123456.7 » donnent 123456 (le dixième est ignoré, et non collé au nombre) ;
+ * « 123.456 » (séparateur de milliers) donne 123456.
+ */
+export function kmDigits(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const compact = raw.replace(/[\s\u00a0\u202f]/g, "").replace(/km$/i, "");
+  const decimal = compact.match(/^(.*\d)[.,]\d{1,2}$/);
+  return (decimal ? decimal[1] : compact).replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+}

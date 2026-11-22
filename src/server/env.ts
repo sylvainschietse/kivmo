@@ -51,7 +51,12 @@ export const env = {
     return process.env.ANTHROPIC_API_KEY ?? "";
   },
   get ocrModel() {
-    return process.env.OCR_MODEL ?? "claude-opus-5-5";
+    return process.env.OCR_MODEL || "claude-haiku-5-5";
+  },
+  /** Plafond global de lectures de photos par jour (tous comptes confondus), pour borner la facture. */
+  get ocrDailyLimit() {
+    const n = Number(process.env.OCR_DAILY_LIMIT);
+    return Number.isFinite(n) && n > 0 ? n : 500;
   },
   /** « db » : fichiers stockés dans PostgreSQL (durable sur Vercel, dont le disque est éphémère). */
   get storageBackend(): "db" | "disk" {
@@ -66,7 +71,7 @@ export const env = {
     return process.env.BANK_ENVIRONMENT === "production" ? "production" : "sandbox";
   },
   get bankWebhookSecret() {
-    return process.env.BANK_WEBHOOK_SECRET ?? (process.env.NODE_ENV === "production" ? "" : "dev-sandbox-webhook-secret");
+    return process.env.BANK_WEBHOOK_SECRET || (process.env.NODE_ENV === "production" ? "" : "dev-sandbox-webhook-secret");
   },
   get pushVapidPublicKey() {
     return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
