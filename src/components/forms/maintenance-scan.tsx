@@ -55,12 +55,17 @@ export function MaintenanceScan({ photoScan }: { photoScan: boolean }) {
     return done;
   }
 
-  async function onPhoto(file: File) {
+  async function onPhoto(file: File, signal: AbortSignal) {
     setState({ status: "reading" });
     const data = await photoToDataUrl(file, 1400, 0.75).catch(() => "");
     setInvoiceData(data);
     if (!photoScan) return setState({ status: "done", message: "Facture jointe : elle sera conservée avec l'entretien." });
-    const r = await scanPhotos<MaintenanceScanResult>("maintenance", { facture: file });
+    const r = await scanPhotos<MaintenanceScanResult>("maintenance", { facture: file }, signal);
+    if (!r.ok && r.aborted) {
+      setInvoiceData("");
+      return setState({ status: "idle" });
+    }
+    if (signal.aborted) return;
     if (!r.ok) return setState({ status: "done", message: `Facture jointe. ${r.message}` });
     const done = fill(r.result);
     const doubt = r.result.confidence !== "haute" ? " Lecture incertaine : vérifiez bien." : "";

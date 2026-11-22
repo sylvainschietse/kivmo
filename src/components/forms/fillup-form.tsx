@@ -212,9 +212,11 @@ export function FillupForm(p: FillupFormProps) {
   }
 
   /** Photo du compteur ou de la pompe : les valeurs lues pré-remplissent le formulaire, à vérifier. */
-  async function readPhoto(kind: "compteur" | "pompe", file: File) {
+  async function readPhoto(kind: "compteur" | "pompe", file: File, signal: AbortSignal) {
     setScan((s) => ({ ...s, [kind]: { status: "reading" } }));
-    const r = await scanPhotos<FillupScanResult>("fillup", { [kind === "pompe" ? "pompe" : "compteur"]: file });
+    const r = await scanPhotos<FillupScanResult>("fillup", { [kind === "pompe" ? "pompe" : "compteur"]: file }, signal);
+    if (!r.ok && r.aborted) return setScan((s) => ({ ...s, [kind]: { status: "idle" } }));
+    if (signal.aborted) return; // une autre photo a pris le relais
     if (!r.ok) return setScan((s) => ({ ...s, [kind]: { status: "error", message: r.message } }));
     const x = r.result;
     const filled: string[] = [];
@@ -380,8 +382,8 @@ export function FillupForm(p: FillupFormProps) {
       {p.photoScan && (
         <Card title="Remplir avec des photos" action={<span className="text-xs text-muted">À vérifier ensuite</span>}>
           <div className="grid gap-2 sm:grid-cols-2">
-            <PhotoButton label="Photo du compteur" hint="Le kilométrage se remplit tout seul." state={scan.compteur} onPhoto={(f) => readPhoto("compteur", f)} />
-            <PhotoButton label="Photo de la pompe" hint="Litres, prix au litre, montant et carburant. Un ticket marche aussi." state={scan.pompe} onPhoto={(f) => readPhoto("pompe", f)} />
+            <PhotoButton label="Photo du compteur" hint="Le kilométrage se remplit tout seul." state={scan.compteur} onPhoto={(f, sig) => readPhoto("compteur", f, sig)} />
+            <PhotoButton label="Photo de la pompe" hint="Litres, prix au litre, montant et carburant. Un ticket marche aussi." state={scan.pompe} onPhoto={(f, sig) => readPhoto("pompe", f, sig)} />
           </div>
         </Card>
       )}

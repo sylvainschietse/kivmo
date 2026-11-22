@@ -53,13 +53,18 @@ export function VehicleScan({ photoScan, currentPhotoUrl }: { photoScan: boolean
     return done;
   }
 
-  async function read(kind: "carte_grise" | "vehicule", file: File) {
+  async function read(kind: "carte_grise" | "vehicule", file: File, signal: AbortSignal) {
     if (kind === "vehicule") {
       photoToDataUrl(file, 640, 0.8).then(setPhotoData).catch(() => undefined);
       if (!photoScan) return setState((s) => ({ ...s, vehicule: { status: "done", message: "Photo ajoutée : elle servira de vignette." } }));
     }
     setState((s) => ({ ...s, [kind]: { status: "reading" } }));
-    const r = await scanPhotos<VehicleScanResult>("vehicle", { [kind]: file });
+    const r = await scanPhotos<VehicleScanResult>("vehicle", { [kind]: file }, signal);
+    if (!r.ok && r.aborted) {
+      if (kind === "vehicule") setPhotoData("");
+      return setState((s) => ({ ...s, [kind]: { status: "idle" } }));
+    }
+    if (signal.aborted) return;
     if (!r.ok) return setState((s) => ({ ...s, [kind]: { status: kind === "vehicule" ? "done" : "error", message: kind === "vehicule" ? `Photo ajoutée en vignette. ${r.message}` : r.message } }));
     // La carte grise fait foi : elle remplace ; la photo de la voiture ne complète que les champs vides.
     const done = fill(r.result, kind === "vehicule");
@@ -80,8 +85,8 @@ export function VehicleScan({ photoScan, currentPhotoUrl }: { photoScan: boolean
         {photoScan ? "Prenez la carte grise et la voiture en photo : la fiche se remplit toute seule, vous vérifiez avant d'enregistrer." : "Ajoutez une photo de la voiture pour la reconnaître d'un coup d'œil."}
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
-        {photoScan && <PhotoButton label="Photo de la carte grise" hint="Marque, modèle, année, énergie, immatriculation." state={state.carte_grise} onPhoto={(f) => read("carte_grise", f)} />}
-        <PhotoButton label="Photo de la voiture" hint={photoScan ? "Avec la plaque visible. Sert aussi de vignette." : "Sert de vignette dans le garage."} state={state.vehicule} preview={photoData || currentPhotoUrl || null} onPhoto={(f) => read("vehicule", f)} />
+        {photoScan && <PhotoButton label="Photo de la carte grise" hint="Marque, modèle, année, énergie, immatriculation." state={state.carte_grise} onPhoto={(f, sig) => read("carte_grise", f, sig)} />}
+        <PhotoButton label="Photo de la voiture" hint={photoScan ? "Avec la plaque visible. Sert aussi de vignette." : "Sert de vignette dans le garage."} state={state.vehicule} preview={photoData || currentPhotoUrl || null} onPhoto={(f, sig) => read("vehicule", f, sig)} />
       </div>
     </div>
   );
